@@ -126,3 +126,6 @@ dmypy.json
 
 # The wav folder containing audio files
 /wav/
+
+# The feat.npy file because it's too big
+/feat.npy
