@@ -6,6 +6,9 @@ import numpy as np
 from scipy.io import wavfile #for audio processing
 import warnings
 import pandas as pd
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split
+from keras.utils import np_utils
 warnings.filterwarnings("ignore")
 
 train_audio_path = './wav/'
@@ -13,10 +16,12 @@ train_file_path = './train.csv'
 test_file_path = './test.csv'
 path_np = './path.npy'
 feat_np = './feat.npy'
+labels = os.listdir(train_audio_path)
 all_data = []
 all_rates = []
 all_durations = []
 all_freq = []
+all_waves = []
 avg_dur = 0
 
 trainData = pd.read_csv(train_file_path)
@@ -50,19 +55,31 @@ plt.show()
 # print(path[0])
 # print(feat[0])
 
-# def Average(lst): 
-#     return sum(lst) / len(lst) 
+def Average(lst): 
+    return sum(lst) / len(lst) 
 
-# for audioFile in os.listdir(train_audio_path):
-#     samples, sample_rate = librosa.load(train_audio_path+audioFile, sr=None)
-#     rate, data = wavfile.read(train_audio_path+audioFile)
-#     all_data.append(data)
-#     all_rates.append(rate)
-#     all_freq.append(sample_rate)
-#     all_durations.append(len(samples)/sample_rate)
+for audioFile in os.listdir(train_audio_path):
+    samples, sample_rate = librosa.load(train_audio_path+audioFile, sr=10000)
+    rate, data = wavfile.read(train_audio_path+audioFile)
+    samples = librosa.resample(samples, sample_rate, target_sr=10000)
+    all_waves.append(samples)
+    all_data.append(data)
+    all_rates.append(rate)
+    all_freq.append(sample_rate)
+    all_durations.append(len(samples)/sample_rate)
 
-# avg_dur = Average(all_durations)
+avg_dur = Average(all_durations)
 
 # print(avg_dur)
 
 # print(all_data[0])
+
+le = LabelEncoder()
+y = le.fit_transform(commands)
+classes = list(le.classes_)
+
+y = np_utils.to_categorical(y, num_classes=len(commands))
+all_waves = np.array(all_waves).reshape(-1, 10000, 1)
+
+x_tr, x_val, y_tr, y_val = train_test_split(np.array(all_waves),np.array(y),stratify=y,test_size = 0.2,random_state=777,shuffle=True)
+
