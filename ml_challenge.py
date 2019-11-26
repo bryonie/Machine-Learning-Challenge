@@ -1,6 +1,5 @@
 import os
 import librosa, librosa.display   #for audio processing
-import speech_recognition as sr
 import IPython.display as ipd
 import matplotlib.pyplot as plt
 import numpy as np
