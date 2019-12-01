@@ -46,8 +46,13 @@ train_feature_label_frame = train_feature_label_frame.drop(columns = "path")
 test_feature_label_frame = testData.merge(feat_path_frame, how='inner', on = ["path"])
 test_feature_label_frame = test_feature_label_frame.drop(columns = "path")
 
-print(train_feature_label_frame.head(1))
-print(test_feature_label_frame.head(1))
+print(train_feature_label_frame)
+print(test_feature_label_frame)
+
+x_train = np.array(train_feature_label_frame["feature"])
+x_test = np.array(test__feature_label_frame["feature"])
+y_train = np.array(train_feature_label_frame["word"])
+y_test = np.array()
 
 
 
