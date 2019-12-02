@@ -6,10 +6,15 @@ import numpy as np
 from scipy.io import wavfile #for audio processing
 import warnings
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
-from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.model_selection import train_test_split
 from keras.utils import np_utils
+
+from keras.layers import Dense, Dropout, Flatten, Conv1D, Input, MaxPooling1D
+from keras.models import Model, load_model
+from keras.callbacks import EarlyStopping, ModelCheckpoint
+from keras import backend as K
+K.clear_session()
 
 warnings.filterwarnings("ignore")
 
@@ -20,13 +25,20 @@ test_file_path = './test.csv'
 path_np = './path.npy'
 feat_np = './feat.npy'
 labels = os.listdir(train_audio_path)
-predict = "word"
 all_data = []
 all_rates = []
 all_durations = []
 all_freq = []
 all_waves = []
 avg_dur = 0
+
+# SOME ASSUMPTIONS
+# train.csv - This is training data to help the model
+# learn, therefore, it will be used as train and validate
+# test.csv - This is the data to test the model after
+# training to check if will output the correct
+# predictions
+#
 
 # Loading data files
 trainData = pd.read_csv(train_file_path)
@@ -54,7 +66,7 @@ train_feature_label_frame = trainData.merge(feat_path_frame, how='inner', on = [
 train_feature_label_frame = train_feature_label_frame.drop(columns = "path")
 train_feature_label_frame["word"] = le.fit_transform(train_feature_label_frame["word"])
 test_feature_label_frame = testData.merge(feat_path_frame, how='inner', on = ["path"])
-test_feature_label_frame = test_feature_label_frame.drop(columns = "path")
+# test_feature_label_frame = test_feature_label_frame.drop(columns = "path")
 
 print(train_feature_label_frame)
 print(test_feature_label_frame)
@@ -77,14 +89,108 @@ commands = list(wordCount["path"].keys())
 
 y = np_utils.to_categorical(train_feature_label_frame["word"], 
 num_classes=len(commands))
+classes = list(le.classes_)
 
 # Splitting data from train into train and test data
-x_tr, x_val, y_tr, y_val = train_test_split(np.array
+x_train, x_val, y_train, y_val = train_test_split(np.array
 (train_feature_label_frame["features"]),np.array(y),
 stratify=y,test_size = 0.2,random_state=777,shuffle=True)
 
-print("X Train:- \n{}\nY Train:- \n{}".format(x_tr, y_tr))
+print("X Train:- \n{}\nY Train:- \n{}".format(x_train, y_train))
 print("X Validate:- \n{}\nY Validate:-\n {}".format(x_val, y_val))
+
+
+# Building 1D Convolution model
+Shape = train_feature_label_frame.shape
+print(Shape)
+inputs = Input(Shape)
+
+#First Layer
+conv = Conv1D(8,13, padding='valid', activation='relu', strides=1)(inputs)
+conv = MaxPooling1D(3)(conv)
+conv = Dropout(0.3)(conv)
+
+#Second layer
+conv = Conv1D(16, 11, padding='valid', activation='relu', strides=1)(conv)
+conv = MaxPooling1D(3)(conv)
+conv = Dropout(0.3)(conv)
+
+#Third layer
+conv = Conv1D(32, 9, padding='valid', activation='relu', strides=1)(conv)
+conv = MaxPooling1D(3)(conv)
+conv = Dropout(0.3)(conv)
+
+#Fourth layer
+conv = Conv1D(64, 7, padding='valid', activation='relu', strides=1)(conv)
+conv = MaxPooling1D(3)(conv)
+conv = Dropout(0.3)(conv)
+
+#Flatten layer
+conv = Flatten()(conv)
+
+#Dense Layer 1
+conv = Dense(256, activation='relu')(conv)
+conv = Dropout(0.3)(conv)
+
+#Dense Layer 2
+conv = Dense(128, activation='relu')(conv)
+conv = Dropout(0.3)(conv)
+
+outputs = Dense(len(commands), activation='softmax')(conv)
+
+model = Model(inputs, outputs)
+model.summary()
+
+# Define loss function
+model.compile(loss='categorical_crossentropy',optimizer='adam',metrics=['accuracy'])
+
+# Setting up easy stoping and model checkpoints
+es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=10, min_delta=0.0001) 
+mc = ModelCheckpoint('best_model.hdf5', monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+
+# TRAINING LE MODEL!
+
+history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], batch_size=32, validation_data=(x_val,y_val))
+
+# Plots a graph that shows the performance of the model training
+# plt.plot(history.history['loss'], label='train') 
+# plt.plot(history.history['val_loss'], label='test') 
+# plt.legend() plt.show()
+
+# Loding in the best model (Not sure of the significants)
+model=load_model('best_model.hdf5')
+
+# Defining prediction function
+
+##
+# @param {*} audio features or samples
+# @return {*} Text prediction from audio
+#
+def predict(audio):
+    prob=model.predict(audio.reshape(1, Shape[0], Shape[1]))
+    index=np.argmax(prob[0])
+    return classes[index]
+
+##
+#  @params {DataFrame}
+#  @return {null}
+#  Using the test_feature_label_frame DataFrame, we 
+#  test the models prediction ability
+def predictFromData(df):
+    # Assuming the data is just like the data in
+    # test_feature_label_frame with only one column
+    # which are the features
+
+    for i, j in df.iterrows():
+        if("path" in i):
+            print("Audio: {}".format(j))
+        elif("features" in i):
+            print("Text: {}".format(predict(j)))
+
+
+predictFromData(test_feature_label_frame)
+
+
 
 # x_train = np.array(train_feature_label_frame["feature"])
 # x_test = np.array(test_feature_label_frame["feature"])
@@ -147,12 +253,5 @@ y_test = [] # Numpy array of labels (in this case commands) to test
 # le = LabelEncoder()
 # y = le.fit_transform(commands)
 # classes = list(le.classes_)
-
-# y = np_utils.to_categorical(y, num_classes=len(commands))
-
-# x = np.array(all_waves).reshape(-1, 10000, 1)
-# y = np.a rray(trainData[predict])
-
-# x_tr, x_val, y_tr, y_val = train_test_split(np.array(all_waves),np.array(y),stratify=y,test_size = 0.2,random_state=777,shuffle=True)
 
 
