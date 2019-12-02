@@ -7,8 +7,10 @@ from scipy.io import wavfile #for audio processing
 import warnings
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder
 from sklearn.model_selection import train_test_split
-# from keras.utils import np_utils
+from keras.utils import np_utils
+
 warnings.filterwarnings("ignore")
 
 train_audio_path = './wav/'
@@ -39,20 +41,45 @@ featFrame = pd.DataFrame(featData)
 pathFrame = pd.DataFrame(pathData)
 pathFrame.columns = ['path']
 feat_path_frame = pd.concat([featFrame, pathFrame], axis=1, join='inner')
-feat_path_frame.columns = ["feature", "path"]
+feat_path_frame.columns = ["features", "path"]
+
+le = LabelEncoder()
 
 train_feature_label_frame = trainData.merge(feat_path_frame, how='inner', on = ["path"])
 train_feature_label_frame = train_feature_label_frame.drop(columns = "path")
+train_feature_label_frame["word"] = le.fit_transform(train_feature_label_frame["word"])
 test_feature_label_frame = testData.merge(feat_path_frame, how='inner', on = ["path"])
 test_feature_label_frame = test_feature_label_frame.drop(columns = "path")
 
 print(train_feature_label_frame)
 print(test_feature_label_frame)
 
-x_train = np.array(train_feature_label_frame["feature"])
-x_test = np.array(test__feature_label_frame["feature"])
-y_train = np.array(train_feature_label_frame["word"])
-y_test = np.array()
+# feat_mean_frame = featFrame.mean(axis=0)
+# feat_std_frame = featFrame.std(axis=0)
+# feat_min_frame = featFrame.min(axis=0)
+# feat_max_frame = featFrame.max(axis=0)
+
+# feat_frame_total = pd.concat([feat_mean_frame.to_frame(),
+# feat_std_frame.to_frame(),feat_min_frame.to_frame(),
+# feat_max_frame.to_frame()], axis= 1,join="inner")
+# feat_frame_total.columns = ["mean", "std", "min", "max"]
+
+# print(feat_frame_total)
+
+y = np_utils.to_categorical(train_feature_label_frame["word"], 
+num_classes=len(train_feature_label_frame.index))
+
+x_tr, x_val, y_tr, y_val = train_test_split(np.array
+(train_feature_label_frame["features"]),np.array(y),
+stratify=y,test_size = 0.2,random_state=777,shuffle=True)
+
+print("X Train:- \n{}\nY Train:- \n{}".format(x_tr, y_tr))
+print("X Validate:- \n{}\nY Validate:-\n {}".format(x_val, y_val))
+
+# x_train = np.array(train_feature_label_frame["feature"])
+# x_test = np.array(test_feature_label_frame["feature"])
+# y_train = np.array(train_feature_label_frame["word"])
+# y_test = np.array()
 
 
 
