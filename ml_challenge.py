@@ -13,6 +13,7 @@ from keras.utils import np_utils
 
 warnings.filterwarnings("ignore")
 
+# Variable Declarations
 train_audio_path = './wav/'
 train_file_path = './train.csv'
 test_file_path = './test.csv'
@@ -27,6 +28,7 @@ all_freq = []
 all_waves = []
 avg_dur = 0
 
+# Loading data files
 trainData = pd.read_csv(train_file_path)
 testData = pd.read_csv(test_file_path)
 
@@ -37,6 +39,7 @@ print(type(featData))
 
 # mfccData = zip(pathData, featData)
 
+# Defining dataframe with features and their paths
 featFrame = pd.DataFrame(featData)
 pathFrame = pd.DataFrame(pathData)
 pathFrame.columns = ['path']
@@ -45,6 +48,8 @@ feat_path_frame.columns = ["features", "path"]
 
 le = LabelEncoder()
 
+# Defining dataframes with train data word(endcoded) x feature 
+# and testdata with features
 train_feature_label_frame = trainData.merge(feat_path_frame, how='inner', on = ["path"])
 train_feature_label_frame = train_feature_label_frame.drop(columns = "path")
 train_feature_label_frame["word"] = le.fit_transform(train_feature_label_frame["word"])
@@ -66,9 +71,14 @@ print(test_feature_label_frame)
 
 # print(feat_frame_total)
 
-y = np_utils.to_categorical(train_feature_label_frame["word"], 
-num_classes=len(train_feature_label_frame.index))
+# Getting list of all commands in train
+wordCount = trainData.groupby('word').count()
+commands = list(wordCount["path"].keys())
 
+y = np_utils.to_categorical(train_feature_label_frame["word"], 
+num_classes=len(commands))
+
+# Splitting data from train into train and test data
 x_tr, x_val, y_tr, y_val = train_test_split(np.array
 (train_feature_label_frame["features"]),np.array(y),
 stratify=y,test_size = 0.2,random_state=777,shuffle=True)
