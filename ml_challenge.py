@@ -24,13 +24,13 @@ train_file_path = './train.csv'
 test_file_path = './test.csv'
 path_np = './path.npy'
 feat_np = './feat.npy'
-labels = os.listdir(train_audio_path)
-all_data = []
-all_rates = []
-all_durations = []
-all_freq = []
-all_waves = []
-avg_dur = 0
+# labels = os.listdir(train_audio_path)
+# all_data = []
+# all_rates = []
+# all_durations = []
+# all_freq = []
+# all_waves = []
+# avg_dur = 0
 
 # SOME ASSUMPTIONS
 # train.csv - This is training data to help the model
@@ -64,46 +64,83 @@ le = LabelEncoder()
 # and testdata with features
 train_feature_label_frame = trainData.merge(feat_path_frame, how='inner', on = ["path"])
 train_feature_label_frame = train_feature_label_frame.drop(columns = "path")
-train_feature_label_frame["word"] = le.fit_transform(train_feature_label_frame["word"])
+features = train_feature_label_frame["features"].values.reshape(
+    train_feature_label_frame["features"].shape[0], 1
+) 
+# train_feature_label_frame["word"] = le.fit_transform(train_feature_label_frame["word"])
 test_feature_label_frame = testData.merge(feat_path_frame, how='inner', on = ["path"])
 # test_feature_label_frame = test_feature_label_frame.drop(columns = "path")
 
 print(train_feature_label_frame)
+print(features)
 print(test_feature_label_frame)
 
-# feat_mean_frame = featFrame.mean(axis=0)
-# feat_std_frame = featFrame.std(axis=0)
-# feat_min_frame = featFrame.min(axis=0)
-# feat_max_frame = featFrame.max(axis=0)
-
-# feat_frame_total = pd.concat([feat_mean_frame.to_frame(),
-# feat_std_frame.to_frame(),feat_min_frame.to_frame(),
-# feat_max_frame.to_frame()], axis= 1,join="inner")
-# feat_frame_total.columns = ["mean", "std", "min", "max"]
-
-# print(feat_frame_total)
+# Just getting the shape of the data
+Shape = train_feature_label_frame.shape
+inputShape = train_feature_label_frame["features"].shape
+print(Shape[0], Shape[1])
+print(inputShape)
+print(features.shape)
 
 # Getting list of all commands in train
 wordCount = trainData.groupby('word').count()
 commands = list(wordCount["path"].keys())
 
-y = np_utils.to_categorical(train_feature_label_frame["word"], 
+y = le.fit_transform(list(train_feature_label_frame["word"]))
+y = np_utils.to_categorical(y, 
 num_classes=len(commands))
 classes = list(le.classes_)
+# y = np.array(y).reshape(-1, y.shape[0], y.shape[1])
+
+all_feat = train_feature_label_frame["features"]
+# all_feat = np.array(all_feat).reshape(-1, Shape[0], Shape[1])
+# all_feat = train_feature_label_frame["features"]
+
+# print(type(train_feature_label_frame["features"])) # Type Series
+# print(type(all_feat)) # Type Numpy Array
+# print(type(y)) # Type Numpy Array
+
+# print(all_feat.shape) # 3D
+# print(y.shape) # 3D
 
 # Splitting data from train into train and test data
-x_train, x_val, y_train, y_val = train_test_split(np.array
-(train_feature_label_frame["features"]),np.array(y),
-stratify=y,test_size = 0.2,random_state=777,shuffle=True)
+x_train, x_val, y_train, y_val = train_test_split(
+    np.array(features),
+np.array(y),stratify = y, train_size = 0.8, test_size = 0.2,
+random_state=777,shuffle=True)
 
 print("X Train:- \n{}\nY Train:- \n{}".format(x_train, y_train))
 print("X Validate:- \n{}\nY Validate:-\n {}".format(x_val, y_val))
 
+print(x_train.shape)
+print(y_train.shape)
+print(x_val.shape)
+print(y_val.shape)
+
+trainShape = x_train.shape
+valShape = x_val.shape
+
+
+x_train = np.array(x_train).reshape(
+    -1, x_train.shape[0], x_train.shape[1]
+)
+
+y_train = np.array(y_train).reshape(
+    -1, y_train.shape[0], y_train.shape[1]
+)
+
+# y_train = np.array(y_train).reshape(
+#     -1, y_train.shape[0], y_train.shape[1]
+# )
+
+# y_val = np.array(y_val).reshape(
+#     -1, y_val.shape[0], y_val.shape[1]
+# )
+
 
 # Building 1D Convolution model
-Shape = train_feature_label_frame.shape
-print(Shape)
-inputs = Input(Shape)
+
+inputs = Input(shape=(trainShape[0], trainShape[1]))
 
 #First Layer
 conv = Conv1D(8,13, padding='valid', activation='relu', strides=1)(inputs)
@@ -142,15 +179,19 @@ model = Model(inputs, outputs)
 model.summary()
 
 # Define loss function
-model.compile(loss='categorical_crossentropy',optimizer='adam',metrics=['accuracy'])
+model.compile(loss='categorical_crossentropy',optimizer='adam',
+metrics=['accuracy'])
 
 # Setting up easy stoping and model checkpoints
-es = EarlyStopping(monitor='val_loss', mode='min', verbose=1, patience=10, min_delta=0.0001) 
-mc = ModelCheckpoint('best_model.hdf5', monitor='val_acc', verbose=1, save_best_only=True, mode='max')
+es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
+ patience=10, min_delta=0.0001) 
+mc = ModelCheckpoint('best_model.hdf5', monitor='val_acc', 
+verbose=1, save_best_only=True, mode='max')
 
 # TRAINING LE MODEL!
 
-history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], batch_size=32, validation_data=(x_val,y_val))
+history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
+batch_size=32, validation_data=(x_val,y_val), verbose=1)
 
 # Plots a graph that shows the performance of the model training
 # plt.plot(history.history['loss'], label='train') 
@@ -167,7 +208,7 @@ model=load_model('best_model.hdf5')
 # @return {*} Text prediction from audio
 #
 def predict(audio):
-    prob=model.predict(audio.reshape(1, Shape[0], Shape[1]))
+    prob=model.predict(audio.reshape(valShape))
     index=np.argmax(prob[0])
     return classes[index]
 
