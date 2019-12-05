@@ -30,15 +30,22 @@ feat_path_frame.columns = ["features", "path"]
 
 test_feature_label_frame = testData.merge(feat_path_frame, how='inner', on = ["path"])
 
-model=load_model('best_model.hdf5')
+conv_model=load_model('best_model.hdf5')
+conv_lstm_model=load_model('best_model_conv-lstm.hdf5')
 start = 20
 stop = 30
 
 for i in range(start,stop):
-    # Predict word
-    prob=model.predict(test_feature_label_frame["features"][i].reshape(-1, 99, 13))
+    # Conv 1D Predict word
+    prob=conv_model.predict(test_feature_label_frame["features"][i].reshape(-1, 99, 13))
     index=np.argmax(prob[0])
     print(classes[index])
+
+    # Conv 1D & LSTM Predict word
+    prob=conv_lstm_model.predict(test_feature_label_frame["features"][i].reshape(-1, 99, 13))
+    index=np.argmax(prob[0])
+    print(classes[index])
+
     # Play Audio
     wave_obj = sa.WaveObject.from_wave_file(train_audio_path+test_feature_label_frame["path"][i])
     play_obj = wave_obj.play()

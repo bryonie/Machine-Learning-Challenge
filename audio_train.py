@@ -14,7 +14,7 @@ from sklearn.preprocessing import LabelEncoder, OneHotEncoder
 from sklearn.model_selection import train_test_split
 from keras.utils import np_utils
 
-from keras.layers import Dense, Dropout, Flatten, Conv1D, Input, MaxPooling1D
+from keras.layers import Dense, Dropout, Flatten, Conv1D, Input, MaxPooling1D, TimeDistributed, LSTM
 from keras.models import Model, load_model, Sequential
 from keras.callbacks import EarlyStopping, ModelCheckpoint
 from keras import backend as K
@@ -96,8 +96,8 @@ x_train, x_val, y_train, y_val = train_test_split(
 labels,stratify = labels, train_size = 0.8, test_size = 0.2,
 random_state=777,shuffle=True)
 
-# print(x_train.shape)
-# print(x_val.shape)
+print(x_train.shape)
+print(x_val.shape)
 
 
 # Building 1D Convolution model
@@ -150,7 +150,7 @@ inputs = Input(shape=(shape[1], shape[2]))
 # Setting up easy stoping and model checkpoints
 es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
  patience=10, min_delta=0.0001) 
-mc = ModelCheckpoint('best_model.hdf5', monitor='val_acc', 
+mc = ModelCheckpoint('best_model_conv-lstm.hdf5', monitor='val_acc', 
 verbose=1, save_best_only=True, mode='max')
 
 # history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
@@ -164,16 +164,31 @@ model.add(Conv1D(32,3, activation='relu', strides=1, padding='same'))
 model.add(Conv1D(64,3, activation='relu', strides=1, padding='same'))
 # model.add(Conv2D(128,(5, 5), activation='relu', strides=(1, 1), padding='same'))
 model.add(MaxPooling1D(3))
+model.add(LSTM(128, return_sequences=True, input_shape=(shape[1], shape[2])))
+model.add(LSTM(65, return_sequences=True))
 model.add(Dropout(0.05))
 model.add(Flatten())
-model.add(Dense(128, activation='relu'))
+# model.add(Dense(128, activation='relu'))
 # model.add(Dense(35, activation='relu'))
 model.add(Dense(35, activation='softmax'))
+
+# model.add(Dropout(0.05))
+# model.add(TimeDistributed(Dense(512, activation='relu')))
+# model.add(TimeDistributed(Dense(256, activation='relu')))
+# model.add(TimeDistributed(Dense(128, activation='relu')))
+# model.add(TimeDistributed(Dense(64, activation='relu')))
+# model.add(Flatten())
+# model.add(Dense(35, activation='softmax'))
 model.summary()
 
 # sparse_categorical_crossentropy
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['acc'])
 
 history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
-batch_size=64, validation_data=(x_val,y_val), verbose=1)
+batch_size=55, validation_data=(x_val,y_val), verbose=1)
 
+
+plt.plot(history.history['loss'], label='train') 
+plt.plot(history.history['val_loss'], label='test') 
+# plt.legend() 
+plt.show()
