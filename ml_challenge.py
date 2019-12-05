@@ -121,21 +121,13 @@ trainShape = x_train.shape
 valShape = x_val.shape
 
 
-x_train = np.array(x_train).reshape(
+x_train = x_train.reshape(
     -1, x_train.shape[0], x_train.shape[1]
 )
 
-y_train = np.array(y_train).reshape(
+y_train = y_train.reshape(
     -1, y_train.shape[0], y_train.shape[1]
 )
-
-# y_train = np.array(y_train).reshape(
-#     -1, y_train.shape[0], y_train.shape[1]
-# )
-
-# y_val = np.array(y_val).reshape(
-#     -1, y_val.shape[0], y_val.shape[1]
-# )
 
 
 # Building 1D Convolution model

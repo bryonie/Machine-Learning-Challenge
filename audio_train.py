@@ -23,13 +23,6 @@ K.clear_session()
 warnings.filterwarnings("ignore")
 
 # Variable Declarations
-# wandb.init()
-# config = wandb.config
-
-# config.max_len = 11
-# config.buckets = 20
-# config.epochs = 50
-# config.bacth_size: 64
 
 train_audio_path = './wav/'
 train_file_path = './train.csv'
@@ -43,35 +36,14 @@ testData = pd.read_csv(test_file_path)
 
 pathData = np.load(path_np)
 featData = np.load(feat_np, allow_pickle=True)
-# featArray = np.empty([featData.size, 99, 13])
-
-# for i in range(0, featData.size):
-#     if(featData[i].size > featArray[i].size):
-#         result = np.resize(featData[i],(99, 13))
-#     else:
-#         result = np.zeros(featArray[i].shape)
-#         result[:featData[i].shape[0], :featData[i].shape[1]] = featData[i]
-
-#     featArray[i] = result
-
-# featData = featData.reshape(
-#     featData,
-#     (
-
-#     )
-# )
-# feat_path_data = np.dstack((featData, pathData))
-# featArray = np.resize(featArray, (featArray.shape[0], featArray.shape[1]))
-print(type(pathData))
-print(type(featData))
-# print(type(featArray))
-print(featData.shape)
-# print(featArray.shape)
-# print(featData)
-# print(featArray)
-
-
-# mfccData = zip(pathData, featData)
+print("Path Data Type: {} | Path Data Shape {}".format(
+    type(pathData),
+    pathData.shape
+))
+print("Feature Data Type: {} | Feature Data Shape {}".format(
+    type(featData),
+    featData.shape
+))
 
 # Defining dataframe with features and their paths
 featFrame = pd.DataFrame(featData)
@@ -86,10 +58,6 @@ le = LabelEncoder()
 # and testdata with features
 train_feature_label_frame = trainData.merge(feat_path_frame, how='inner', on = ["path"])
 train_feature_label_frame = train_feature_label_frame.drop(columns = "path")
-# train_feature_label_frame["features"] = train_feature_label_frame["features"].values.reshape(
-#     train_feature_label_frame["features"].size,
-#     99
-# )
 test_feature_label_frame = testData.merge(feat_path_frame, how='inner', on = ["path"])
 
 # print(train_feature_label_frame["features"])
@@ -107,6 +75,9 @@ labels = np_utils.to_categorical(labels,
 num_classes=len(classes))
 temp_features = train_feature_label_frame["features"].to_numpy()
 features = np.empty([temp_features.size, 99, 13])
+
+##
+# Coverting 1D Array of Features to a 3D Array
 for i in range(0, temp_features.size):
     if(temp_features[i].size > features[i].size):
         result = np.resize(temp_features[i],(99, 13))
@@ -116,8 +87,6 @@ for i in range(0, temp_features.size):
 
     features[i] = result
 print(len(temp_features))
-# features = np.resize(temp_features, (temp_features.shape[0], 1))
-# features = features.reshape(-1, features.shape[0], features.shape[1])
 print(features.shape)
 print(train_feature_label_frame["features"].shape)
 
@@ -127,27 +96,16 @@ x_train, x_val, y_train, y_val = train_test_split(
 labels,stratify = labels, train_size = 0.8, test_size = 0.2,
 random_state=777,shuffle=True)
 
-# # # x_train = x_train.to_numpy()
-# # # x_val = x_val.to_numpy()
-# # print(x_train)
-# # print(y_train)
+# print(x_train.shape)
+# print(x_val.shape)
 
-# x_train = np.resize(x_train, (35, x_train.shape[0], x_train.shape[1]))#x_train.reshape(35, x_train.shape[0], x_train.shape[1])
-print(x_train.shape)
-# # print(x_val.shape)
-
-# # # x_train = x_train.reshape(1, x_train.shape[0], 1)
-# # # x_val = x_val.reshape(1, x_val.shape[0], 1)
-
-# # # print(x_train.shape)
-# # # print(x_val.shape)
-
-# # y_train_hot = np_utils.to_categorical(y_train)
-# # y_test_hot = np_utils.to_categorical(y_val)
 
 # Building 1D Convolution model
 shape = x_train.shape
 inputs = Input(shape=(shape[1], shape[2]))
+
+##
+# First 1D Convolution model (Unable to train with data)
 
 # #First Layer
 # conv = Conv1D(8,13, padding='valid', activation='relu', strides=1)(inputs)
@@ -198,6 +156,8 @@ verbose=1, save_best_only=True, mode='max')
 # history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
 # batch_size=64, validation_data=(x_val,y_val), verbose=1)
 
+##
+# 1D Convolution model works with data
 model = Sequential()
 model.add(Conv1D(16,1, activation='relu', strides=1, padding='same', input_shape=(shape[1], shape[2])))
 model.add(Conv1D(32,3, activation='relu', strides=1, padding='same'))
