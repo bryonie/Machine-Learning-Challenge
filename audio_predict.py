@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-import IPython.display as ipd
 import matplotlib.pyplot as plt
 import simpleaudio as sa
 from keras.models import load_model
