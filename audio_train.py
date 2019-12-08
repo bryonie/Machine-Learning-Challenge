@@ -8,6 +8,7 @@ import numpy as np
 import warnings
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from keras.utils import np_utils
 
@@ -204,3 +205,7 @@ plt.plot(history.history['loss'], label='train')
 plt.plot(history.history['val_loss'], label='test') 
 # plt.legend() 
 plt.show()
+
+# Calculation and outputing accuracy
+y_pred = model.predict_classes(x_val, verbose=False)
+print(accuracy_score(y_val, y_pred))

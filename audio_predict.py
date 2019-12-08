@@ -33,8 +33,8 @@ conv_model=load_model('best_model.hdf5')
 conv_lstm_model=load_model('best_model_conv-lstm.hdf5')
 conv_lstm_70_30_model=load_model('best_model_conv-lstm(70_30).hdf5')
 conv_lstm_bat32_model=load_model('best_model_conv-lstm(b32).hdf5')
-start = 10
-stop = 30
+start = 0
+stop = test_feature_label_frame["features"].size
 results = {
     "Path" : [],
     "Word": []
@@ -64,18 +64,18 @@ for i in range(start,stop):
     prob=conv_lstm_70_30_model.predict(features.reshape(-1, 99, 13))
     index=np.argmax(prob[0])
     print("Conv 1D - LSTM (70:30): {}".format(classes[index]))
-    results["Path"].append(test_feature_label_frame["path"][i])
-    results["Word"].append(classes[index])
 
     # Conv 1D & LSTM batch size 32 Predict word
     prob=conv_lstm_bat32_model.predict(features.reshape(-1, 99, 13))
     index=np.argmax(prob[0])
     print("Conv 1D - LSTM (batch 32): {}".format(classes[index]))
+    results["Path"].append(test_feature_label_frame["path"][i])
+    results["Word"].append(classes[index])
 
-    # Play Audio
-    wave_obj = sa.WaveObject.from_wave_file(train_audio_path+test_feature_label_frame["path"][i])
-    play_obj = wave_obj.play()
-    play_obj.wait_done()
+    # # Play Audio
+    # wave_obj = sa.WaveObject.from_wave_file(train_audio_path+test_feature_label_frame["path"][i])
+    # play_obj = wave_obj.play()
+    # play_obj.wait_done()
 
 Results = pd.DataFrame(results)
 

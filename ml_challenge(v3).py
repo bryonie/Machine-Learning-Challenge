@@ -8,6 +8,7 @@ import numpy as np
 import warnings
 import pandas as pd
 from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score
 from sklearn.model_selection import train_test_split
 from keras.utils import np_utils
 
@@ -119,10 +120,14 @@ verbose=1, save_best_only=True, mode='max')
 history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
 batch_size=32, validation_data=(x_val,y_val), verbose=1)
 
-## 1D Conv. 80:20, batch=64  : acc:81.7%
-## 1D Conv LSTM. 80:20, batch=55 : acc:89.997%
-## 1D Conv LSTM. 70:30, batch=32 : acc:89.695%
-## 1D Conv LSTM. 80:20, batch=32 : acc:90.076%
+# Calculation and outputing accuracy
+y_pred = model.predict_classes(x_val, verbose=False)
+print(accuracy_score(y_val, y_pred))
+
+## 1D Conv. 80:20, batch=64  : acc:81.7% (first)
+## 1D Conv LSTM. 80:20, batch=55 : acc:89.997% (first)
+## 1D Conv LSTM. 70:30, batch=32 : acc:89.695% (first)
+## 1D Conv LSTM. 80:20, batch=32 : acc:90.076% (first)
 
 results = {
     "Path" : [],
