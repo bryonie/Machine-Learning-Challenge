@@ -34,14 +34,7 @@ testData = pd.read_csv(test_file_path)
 
 pathData = np.load(path_np)
 featData = np.load(feat_np, allow_pickle=True)
-# print("Path Data Type: {} | Path Data Shape {}".format(
-#     type(pathData),
-#     pathData.shape
-# ))
-# print("Feature Data Type: {} | Feature Data Shape {}".format(
-#     type(featData),
-#     featData.shape
-# ))
+
 
 # Defining dataframe with features and their paths
 featFrame = pd.DataFrame(featData)
@@ -94,7 +87,7 @@ shape = x_train.shape
 inputs = Input(shape=(shape[1], shape[2]))
 
 ##
-# 1D Convolution model works with data
+# 1D Convolution + LSTM Modelmodel working with data 80:20, batch=32
 model = Sequential()
 model.add(Conv1D(16,1, activation='relu', strides=1, padding='same', input_shape=(shape[1], shape[2])))
 model.add(Conv1D(32,3, activation='relu', strides=1, padding='same'))
