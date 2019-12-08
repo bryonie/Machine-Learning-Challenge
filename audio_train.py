@@ -3,14 +3,11 @@
 
 # IN[ ]:
 import os
-import librosa, librosa.display   #for audio processing
-import IPython.display as ipd
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.io import wavfile #for audio processing
 import warnings
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder, OneHotEncoder
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from keras.utils import np_utils
 
@@ -96,6 +93,11 @@ x_train, x_val, y_train, y_val = train_test_split(
 labels,stratify = labels, train_size = 0.8, test_size = 0.2,
 random_state=777,shuffle=True)
 
+# x_train, x_val, y_train, y_val = train_test_split(
+#     features,
+# labels,stratify = labels, train_size = 0.7, test_size = 0.3,
+# random_state=777,shuffle=True)
+
 print(x_train.shape)
 print(x_val.shape)
 
@@ -148,9 +150,14 @@ inputs = Input(shape=(shape[1], shape[2]))
 # metrics=['accuracy'])
 
 # Setting up easy stoping and model checkpoints
+# es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
+#  patience=10, min_delta=0.0001) 
+# mc = ModelCheckpoint('best_model_conv-lstm.hdf5', monitor='val_acc', 
+# verbose=1, save_best_only=True, mode='max')
+
 es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
  patience=10, min_delta=0.0001) 
-mc = ModelCheckpoint('best_model_conv-lstm.hdf5', monitor='val_acc', 
+mc = ModelCheckpoint('best_model_conv-lstm(b32).hdf5', monitor='val_acc', 
 verbose=1, save_best_only=True, mode='max')
 
 # history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
@@ -185,7 +192,12 @@ model.summary()
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['acc'])
 
 history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
-batch_size=55, validation_data=(x_val,y_val), verbose=1)
+batch_size=32, validation_data=(x_val,y_val), verbose=1)
+
+## 1D Conv. 80:20, batch=64  : acc:81.7%
+## 1D Conv LSTM. 80:20, batch=55 : acc:89.997%
+## 1D Conv LSTM. 70:30, batch=32 : acc:89.695%
+## 1D Conv LSTM. 80:20, batch=32 : acc:90.076%
 
 
 plt.plot(history.history['loss'], label='train') 
