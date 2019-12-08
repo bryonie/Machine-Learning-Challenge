@@ -89,14 +89,8 @@ labels,stratify = labels, train_size = 0.8, test_size = 0.2,
 random_state=777,shuffle=True)
 
 # Building 1D Convolution model
-# shape = x_train.shape
-# inputs = Input(shape=(shape[1], shape[2]))
-
-# Setting up easy stoping and model checkpoints
-es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
- patience=10, min_delta=0.0001) 
-mc = ModelCheckpoint('final_model.hdf5', monitor='val_acc', 
-verbose=1, save_best_only=True, mode='max')
+shape = x_train.shape
+inputs = Input(shape=(shape[1], shape[2]))
 
 ##
 # 1D Convolution model works with data
@@ -113,6 +107,14 @@ model.add(Dense(35, activation='softmax'))
 model.summary()
 
 model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=['acc'])
+
+# Setting up easy stoping and model checkpoints
+es = EarlyStopping(monitor='val_loss', mode='min', verbose=1,
+ patience=10, min_delta=0.0001) 
+mc = ModelCheckpoint('final_model.hdf5', monitor='val_acc', 
+verbose=1, save_best_only=True, mode='max')
+
+# Fit the model to train
 
 history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
 batch_size=32, validation_data=(x_val,y_val), verbose=1)
