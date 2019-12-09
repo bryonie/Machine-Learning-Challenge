@@ -1,0 +1,675 @@
+---
+output: pdf_document
+---
+
+```{r RMarkdown setup., include = FALSE}
+knitr::opts_knit$set(root.dir = '~/Dropbox/Gitbucket/Course')
+## note: this bit of RMarkdown code is only required if you want to
+## 'knit' the worksheet to HTML or PDF
+
+## written by Elske van der Vaart, Cognitive Science & AI, Tilburg University
+```
+
+## Research Skills: Programming with R
+
+## Worksheet 5
+
+Welcome to Worksheet 5. Last week we made a start with general R programming skills; this week our main focus will be on data *cleaning* and *tidying*. So far, the data sets we've worked with have been in pretty good shape. They consisted of a single table each, with correct formatting, and no input errors.
+
+In reality, you'll often be working with data sets that need quite a bit of reworking before they're fit for further analysis. We'll practice some of that today. And because different data sets are 'dirty' in different ways, this requires a bit more programming than we've done so far.
+
+### An Example of Dirty Data
+
+It's not actually that easy to find properly dirty data sets. Everyone cleans their findings before sharing them! So today we'll be using a small data set that I happen to have access to: 757 answers to a questionnaire designed by first year students at the University of Amsterdam, from 2012 and 2013.
+
+The questionnaire was part of a research project: All students, and some staff, took a VO2max cycling test, which measures exercise capacity, and then answered a series of questions about their habits. Originally there were 60 questions in this questionnaire; in the edited version on Blackboard, there's 5 left:
+
+```{r Loading student data sets.}
+## read in two data sets from a student-designed survey
+student12 <- read.delim("input/student12.txt", stringsAsFactors = FALSE)
+student13 <- read.delim("input/student13.txt", stringsAsFactors = FALSE)
+```
+
+Let's look at these data sets; you can just use `View()` if you like. It should be immediately apparent that participants' answers aren't consistent: e.g., some have used comma's to indicate decimals and some have used points, and others have given their birth years instead of their ages.
+
+We'll start this worksheet by learning how to fix these issues, mostly using existing R skills. Then we'll talk explicitly about importing data sets into R in the first place; finally, we'll look at some new 'tidyverse' tools for merging and re-shaping data, using `dplyr` and `tidyr`.
+
+### Binding & Hand-Fixing Bad Values
+
+Our first step in tidying these two `student` data sets should probably be to combine them. Helpfully, the `dplyr` package offers just the right function for this: `bind_rows()`, which 'appends' one data set to another as new rows (where 'appends' means 'add to the end of'). Let's load `dplyr` and try it:
+
+```{r Loading dplyr., message = FALSE}
+## loading the 'dplyr' package
+library("dplyr")
+```
+
+```{r Attempting to bind two data frames together., eval = FALSE}
+## adding a new variable that encodes year
+student <- bind_rows(student12, student13)
+```
+
+Uh-oh. What's happened? We're getting an `'Error: Column Age can't be converted from character to integer'`. An integer is a whole number - but apparently at least one of our `Age` columns is currently of type `character`? Why would that be? Let's try and figure out where the problem is.
+
+```{r Tracing the Age-related error; checking class.}
+## checking the 'class' of the two Age columns
+class(student12$Age)
+class(student13$Age)
+```
+
+```{r Tracing the Age-related error; checking the contents.}
+## checking the count of the different values in the two Age columns
+table(student12$Age, useNA = "always")
+table(student13$Age, useNA = "always")
+```
+
+Okay. The problem appears to be the `student12` data set: That `Age` column has been converted to character. A close look at `table(student12$Age)` will reveal why: One participant has put in `"1 9"` as their age, with a backtick in the middle. This converts the whole column to character, not number.
+
+So how do we find this one bad value and fix it? There's two main tricks involved: The first is that if you use `as.numeric()` on something that can't directly be transformed to a number, you get `NA`. The second is that you can use `which()` to get the indexes where a particular condition is `TRUE`.
+
+```{r Finding non-numeric Ages.}
+## converting `student12$Age` to numbers; this produces a Warning
+all_ages <- as.numeric(student12$Age)
+
+## using which to find `NA` values
+which(is.na(all_ages))
+
+## looking at the identified error
+student12$Age[313]
+```
+
+Now that we know the problematic `"1 9"` value is in row 313, what should we do with it? If this was a really large data set, with lots of bad inputs, we might have to simply remove everything non-numeric. We could remove the whole row, or just overwrite the offending values to `NA`.
+
+But, in this case, we have a small enough number of non-numeric values that we can just fix them by hand - the students' intended input was clear enough. Then we can convert the whole `Age` column back to character, and successfully use `bind_rows()` to combine our two data sets together:
+
+```{r Handfixing bad inputs and row_binding() the data sets.}
+## handfixing the bad input
+student12$Age[313] <- 19
+
+## converting the `student12$Age` column back to numeric
+student12$Age <- as.numeric(student12$Age)
+
+## using 'row_bind()' to combine the two data sets together
+student <- bind_rows(student12, student13)
+```
+
+\newpage
+#### Exercises
+
+(1) Use `which()` to find all the indexes of the rows in `student` where `Age` is over 23 and under 25. (Hint: How would you combine two requirements in an ordinary subsetting statement?)
+
+```{r Exercise 1. Using which().}
+## find all students over 23 and under 25
+which(student$Age > 23 & student$Age < 25)
+
+## answer: 6 indexes, starting with 36 and ending with 555
+```
+
+(2) The code we've written for finding non-numeric values would be even better as a function. There's one in the code chunk below. It works fine on data like `students12$Age`, but it returns the indexes of values that were already `NA` to start with, too. Can you improve it so that this doesn't happen?
+
+```{r Exercise 2. A function for finding non-numeric values.}
+## function for finding non-numeric values
+find_nonnums <- function(values) {
+  conv_nums <- suppressWarnings(as.numeric(values))
+  which(is.na(conv_nums))
+}
+
+## examples of using 'find_nonnums()'
+find_nonnums(c("1", "2", "1. 6"))         ## works
+find_nonnums(c("1", NA, "1. 6"))          ## doesn't work: returns the NA too
+
+## answer
+find_nonnums <- function(values) {
+  conv_nums <- suppressWarnings(as.numeric(values))
+  which(is.na(conv_nums) & !is.na(values))
+}
+```
+
+(3) Find the indexes of all `Weight` values that aren't numbers. (Hint: You can use the function from the last exercise even if you couldn't improve it.)
+
+```{r Exercise 3. Finding all non-numeric weights. }
+## find all non-numeric weights
+find_nonnums(student$Weight)
+
+## answer: 131, 667 and 714
+```
+
+### More Fixing of Bad Values
+
+In the previous section, we managed to clean up our data enough that we could at least bind it together. But things are still very messy: Let's start by looking at the `Height` variable. Given the values in the data set, it's clear subjects were instructed to indicate their height in centimeters:
+
+```{r All Heights in the data set., eval = FALSE}
+## showing all counts of the 'Height' variable
+table(student$Height, useNA = "always")
+```
+
+But many did not:
+
+```{r All non-numeric Heights.}
+## printing all non-numeric 'Height' values
+student$Height[find_nonnums(student$Height)]
+```
+
+So how do we fix *this*? We can of course just do what we did for `Age`: Find the non-numeric values, then delete them, or adapt them by hand. But let's see if we can't take a slightly more clever approach.
+
+Looking at all the `Height` values, we've basically got two problems: We won't be able to convert to numeric because there's comma's and backticks in the values, and even if we could, no-one is 1.73 centimeters tall.
+
+Let's solve the first problem. One way to do this is with `gsub`. From `?gsub`: It takes a `pattern`, a `replacement`, and an `x` argument. That is, it looks for a `pattern` in `x` and overwrites all copies of that `pattern` with `replacement`. So, for example, we can use it to remove illegal characters:
+
+```{r Using gsub to remove illegal characters.}
+## using gsub to remove illegal characters
+corrupted_strings <- c("app>le", "grape>", ">berry>>")
+gsub(pattern = ">", replacement = "", x = corrupted_strings, fixed = TRUE)
+```
+
+One important thing to note here is the `fixed = TRUE` argument. Unless you include this, `gsub()` will interpret the `pattern` specified as a *regular expression*, which is basically a special language for specifying search patterns in text. This can be confusing if you try to remove, say, a `.`:
+
+```{r The period in regular expressions.}
+## demonstrating . in a regular expression
+gsub(".", "", "a_string.with_a_few_periods")
+```
+
+What's happening is that in a regular expression, a `.` matches anything, and so *all* the text in `x` is getting replaced by `""`. This course won't delve into regular expressions any further, but if you're already familiar with them, you can of course use them. Otherwise, stick to `fixed = TRUE`!
+
+#### Exercises
+
+(4) Write a function called `make_numbers()` that uses `gsub()` to fix errors like those in the `Height` column. That is, it should take a vector of values (like a dataframe column), and then replace comma's with periods and backticks with empty strings, after which it should convert all the values to numbers.
+
+```{r Exercise 4. Write a function for fixing numeric values.}
+## write a function for fixing numeric values
+make_numbers <- function(values) {
+  values <- gsub(",", ".", values)
+  values <- gsub("`", "", values)
+  values <- as.numeric(values)
+  values
+}
+```
+
+(5) Use the function you've just written to fix the `Height`, `Weight` and `VO2max` columns in the data set; they all suffer the same problems. Note: This can be done most efficiently using a skill from Worksheet 4. Also, this won't yet fix the problem of unrealistic values; we'll get to that.
+
+```{r Exercise 5. Fix other numeric columns.}
+## fix the 'Height', 'Weight' and VO2max columns
+
+## solution 1:
+student$Height <- make_numbers(student$Height)
+student$Weight <- make_numbers(student$Weight)
+student$VO2max <- make_numbers(student$VO2max)
+
+## solution 2 [this one is better!]:
+student <- student %>%
+  mutate_at(vars(Height, Weight, VO2max), funs(make_numbers))
+```
+
+(6) To continue with the worksheet, the previous two exercises have to be solved correctly. To check that you've done that, get the `student_ex6.txt` data set from Blackboard and compare it to your solution. If you're stuck, ask a question on Blackboard and continue with this object for now.
+
+```{r Exercise 6. Check answers so far.}
+## read in the data set that results from solving all the exercises so far
+student_ex6 <- read.delim("input/student_ex6.txt", stringsAsFactors = FALSE)
+
+## compare the state of your 'student' object to the correct solution
+all_equal(student, student_ex6, convert = TRUE)
+## the 'convert = TRUE' argument ensures that <int> and <dbl> columns are
+## considered equivalent, where <int> is for whole numbers, and <dbl> for
+## numbers with decimals; otherwise this comparison won't work here
+```
+
+### Finding & Fixing Outliers
+
+At this point, we've converted all our numeric variables to actual numbers. That's progress. But that doesn't mean we're there: Some of our numbers are probably wrong. Let's create a plot of `VO2max` versus `Age`:
+
+```{r Loading ggplot2., message = FALSE}
+## loading the 'ggplot2' package
+library("ggplot2")
+```
+
+```{r VO2max versus Age., fig.width = 8, fig.height = 2}
+## plotting 'VO2max' versus 'Age'
+ggplot(student, aes(x = Age, y = VO2max)) +
+  geom_point()
+```
+
+Uh-oh. Looking at this plot, there's at least two types of problem. Some subjects have clearly entered their birth years instead of their ages. And some have forgotten a decimal point when entering their `VO2max`.
+
+```{r Distribution of Age and VO2max., eval = FALSE}
+## looking at the current distribution of values
+table(student$Age, useNA = "always")
+table(student$VO2max, useNA = "always")
+```
+
+So now what? We *could* fix both columns using only skills taught in previous worksheets; it's just a question of applying them in the right way. However, there is a more intuitive solution using `mutate()` and `ifelse()`.
+
+In `?ifelse`, you'll see that `ifelse` takes three arguments: `test`, `yes`, and `no`. All the entries which pass the `test` will be changed as specified by `yes`, while all those that don't will be changed as specified by `no`.
+
+```{r Fixing Age and VO2max.}
+## using 'mutate' and 'ifelse' to fix Age and VO2max
+student <- student %>%
+  mutate(Age = ifelse(Age > 100, NA, Age)) %>%
+  mutate(VO2max = ifelse(VO2max > 10, VO2max / 10, VO2max))
+```
+
+In this case, we can `mutate()` our column `Age` so that all entries greater than 100 become `NA` and our column `VO2max()` so that all entries greater than than 10 are divided by 10. Other entries will remain unchanged. Let's look at our plot again to see if the situation has improved:
+
+```{r Re-plotting VO2max as a function of Age, fig.width = 8, fig.height = 2}
+## re-plotting VO2max as a function of Age
+ggplot(student, aes(x = Age, y = VO2max)) +
+  geom_point()
+```
+
+That's much better! But there's still some problematic points: No one alive has a `VO2max` of 0; that's probably subjects who, for whatever reason, couldn't take the cycling test at all. And according to Wikipedia, the `VO2max` of 'elite oarsmen', is 6.1, so anything over 7 is almost certainly an error.
+
+(7) Adjust the `student$VO2max` column so that it sets all these other problematic values to `NA` also, and re-create the "VO2max versus Age" scatterplot.
+
+```{r Exercise 7. Further fix VO2max., fig.width = 8, fig.height = 2}
+## further fix the incorrect VO2max values
+student <- student %>%
+  mutate(VO2max = ifelse(VO2max > 7 | VO2max == 0, NA, VO2max))
+
+## re-plotting VO2max as a function of Age
+ggplot(student, aes(x = Age, y = VO2max)) +
+  geom_point()
+```
+
+Overall, what we've done here is correct subjects' input errors. This is necessarily an ad-hoc process. What you should do with 'outliers' depends on your data, and your knowledge of it. But hopefully this worksheet has taught you some strategies for approaching this issue.
+
+#### Exercises
+
+(8) If we create a plot of subjects' `Height` as a function of their `Weight`, we likewise see some very strange values come up. Correct these as we've just done for `VO2max` and `Age`. Use your judgement; there's no single "right" answer here, but there's a plot on Blackboard showing one possible result.
+
+```{r Exercise 8. Fixing Height and Weight., fig.height = 2, fig.width = 8}
+## plotting 'Height' vs 'Weight'
+ggplot(student, aes(x = Height, y = Weight)) +
+  geom_point()
+
+## fixing the 'Height' and 'Weight' columns
+student <- student %>%
+  ## heights under 3 are probably in meters - fix by multiplying by 100
+  mutate(Height = ifelse(Height < 3, Height * 100, Height)) %>%
+  ## heights over 3 but under 100 are probably missing 100 cm
+  mutate(Height = ifelse(Height < 100, Height + 100, Height)) %>%
+  ## don't know how to fix 'weight = 1.75'
+  mutate(Weight = ifelse(Weight == 1.75, NA, Weight))
+
+## plotting 'Height' vs 'Weight'
+ggplot(student, aes(x = Height, y = Weight)) +
+  scale_x_continuous("Height (cm)") +
+  scale_y_continuous("Weight (kg)") +
+  geom_point()
+```
+
+### Importing Data Sets
+
+So far, we've only used `read.delim()` to import data into R. But we haven't really looked at it in any detail. What does it do? If you look at `?read.delim()`, you'll see that it's one of several 'base R' functions for reading in table-like data, all with different defaults.
+
+For `read.delim()`, the most important defaults are `header = TRUE`, which means it assumes files start with a row of column names, sep = `"\t"`, which means it assumes columns are separated by tabs, and `na.strings = NA`, from `read.table()`, which means it interprets the string `"NA"` as "missing data".
+
+So far, this course has used with files where these defaults work, but that's not always the case, and it's important to be aware of the other options.
+
+For example, the next data set we're going to work with is split over several files. It's the so-called "MovieLens" data set, which contains 100,000 ratings from 943 people on 1682 movies, collected by the University of Minnesota in the late 1990s. There's a download link on Blackboard.
+
+Let's import one of these files, `"u.item"`, using `read.delim()`'s default settings. This goes horribly wrong:
+
+```{r Reading in u.item - badly., eval = FALSE}
+## attempting to read in the 'u.item' data file
+u_item <- read.delim("input/ml-100k/u.item", stringsAsFactors = FALSE)
+```
+
+```{r Inspecting u_item., eval = FALSE}
+## inspecting u_item
+dim(u_item)
+head(u_item)
+names(u_item)
+```
+
+Basically, we've ended up with a single column, and the first row has become the name of that column. If you follow the 'Data Documentation' link on Blackboard, you'll see that this is supposed to be a tab-separated file, but clearly it's not - columns are separated by "|"s.
+
+The other problem is that this data lacks column names, so that the default `header = TRUE` of `read.delim()` is inappropriate. Let's fix these issues:
+
+```{r Reading in u.item - better., cache = TRUE}
+## attempting to read in the 'u.item' data file
+u_item <- read.delim("input/ml-100k/u.item", sep = "|", header = FALSE,
+  stringsAsFactors = FALSE)
+```
+
+Any time you're stuck trying to read in a file, take a look at `?read.table()` - perhaps there is some other function or argument that will help.
+
+If these base R reading functions are taking too long, be aware that there's other options too. For instance, there's `readr`, which is part of the 'tidyverse'; it has slightly different options and defaults, but it's fast and offers a progress bar, which can be useful for very large files.
+
+#### Exercises
+
+(9) There's three new versions of the `"houses.txt"` file on Blackboard, called `"houses1.txt"`, `"houses2.txt"` and `"houses3.csv"`. Use `read.delim()`'s options to read these these two files in correctly; you can use `all_equal()` with the original `houses` object to check your answers.
+
+```{r Exercise 9. Reading in files.}
+## reading in the original 'houses' object
+houses <- read.delim("input/houses.txt", stringsAsFactors = FALSE)
+
+## read in the modified 'houses' objects
+houses1 <- read.delim("input/houses1.txt", skip = 5, stringsAsFactors = FALSE)
+houses2 <- read.delim("input/houses2.txt", na.strings = "-",
+  stringsAsFactors = FALSE)
+houses3 <- read.csv("input/houses3.csv", stringsAsFactors = FALSE)
+```
+
+### Merging Data
+
+What if your data isn't neatly arranged in a single table? The "MovieLens" data set mentioned earlier is an example of this. In addition to the `u_item` file we've already read in, let's read in `u_data` and `u_user`: 
+
+```{r Reading in the other MovieLens files., cache = TRUE}
+## reading in the other MovieLens files
+u_user <- read.delim("input/ml-100k/u.user", sep = "|",
+  header = FALSE, stringsAsFactors = FALSE)
+
+u_data <- read.delim("input/ml-100k/u.data",
+  sep = "\t", header = FALSE, stringsAsFactors = FALSE)
+```
+
+There's more information linked on Blackboard, but basically these 3 files contain the following:
+
+* u_item: movie id | title | release date | video release date | IMDB | genres
+* u_user: user id | age | sex | occupation | zip code
+* u_data: user id | movie id | rating | time stamp
+
+```{r Checking out the 3 main MovieLens files., eval = FALSE}
+## checking out the 3 main "MovieLens"" files.
+head(u_item)
+head(u_user)
+head(u_data)
+```
+
+This means that, in principle, we can use this data set to answer questions like: "How highly do scientists rate movies of different genres?" But this will only work if we can somehow combine the information contained in the different files. Fortunately, using some `dplyr` magic, we can.
+
+First, we'll have to add some variable names, and let's remove the columns we won't use. For `u_user` and `u_data`, this is a straightforward process:
+
+```{r Re-naming u_user and u_data.}
+## re-naming u_user and u_data
+u_user <- rename(u_user, User_ID = V1, Age = V2, Sex = V3, Occupation = V4) %>%
+  select(-V5)
+u_data <- rename(u_data, User_ID = V1, Movie_ID = V2, Rating = V3) %>%
+  select(-V4)
+```
+
+For `u_item`, it's a bit trickier: The last 19 columns represent 19 different genres, starting with 'Unknown' and ending with 'Western', where a 1 indicates the movie belongs to that genre, and a 0 that it does not. We can re-name these columns by hand, of course, but that's a bit tedious.
+
+Instead, let's read in a special file which just lists the 19 genres. Helpfully, the 19 genres in the first column of this file are in the right order to serve as the names of the last 19 columns in `u_item`.
+
+```{r Reading in the u_genre file.}
+## reading in the u_genre file
+u_genre <- read.delim("input/ml-100k/u.genre",
+  sep = "|", header = FALSE, stringsAsFactors = FALSE)
+
+head(u_genre)
+```
+
+So how do we use this file to rename the `u_item` columns? The easiest solution involves 'base R', as shown below: Basically, we can overwrite the 6th to 24th `colnames()` in `u_item` - i.e., the columns corresponding to the different genres - with the genre names provided in the `u_genre` file.
+
+```{r Adding the genre names to u_item. }
+## add the genre names to u_item
+colnames(u_item)[6:24] <- u_genre[, 1]
+```
+
+We can then re-name the other columns using `dplyr`, capitalise `"unknown"`, and remove the superfluous 'video release date' and 'IMDB' columns.
+
+```{r Re-naming u_item.}
+## re-naming the other columns
+u_item <- rename(u_item, Movie_ID = V1, Title = V2, Release_Date = V3,
+  Unknown = unknown) %>%
+  select(-V4, -V5)
+
+## looking at the first few rows and columns
+u_item[1:5, 1:12]
+```
+
+Now, what we'd *like* to do is to add, say, the `u_user` information to the `u_data` data frame. What `dplyr` offers for this is a series of `join()` functions. In this case we want a `left_join()`: It takes arguments `a`, `b`, and `by`, and then merges `b` with `a` on the basis of column `by`.
+
+The 'Data Transformation' cheatsheet, under Help > Cheatsheets, offers an overview of all the `join()` functions. Note in particular that the column to join by always has to be specified with quotation marks, `""`.
+
+Here's an example with a simple data set: We're joining `weights` with `animals` on the basis of `species`. Note the difference with the `col_bind()` function we saw earlier: The rows don't have to be in the same order, and if some are missing in the data to be added, `NA`s are added automatically.
+
+```{r Demonstrating a left-join.}
+## demonstrating a left-join
+animals <- data.frame(species = c("aardvark", "armadillo", "badger"),
+  height = c(60, 20, 25), stringsAsFactors = FALSE)
+animals
+
+weights <- data.frame(species = c("badger", "aardvark"),
+  weight = c(12, 50), stringsAsFactors = FALSE)
+weights
+
+animals <- left_join(animals, weights, by = "species")
+animals
+```
+
+Now, let's use a `left_join()` to merge our `u_data` and `u_user` data sets:
+
+```{r Adding u_user information to u_data. }
+## adding u_user information to u_data.
+u_data_user <- left_join(u_data, u_user, by = "User_ID")
+```
+
+That is very convenient! We can now plot, say, the mean `Rating` per `Sex`:
+
+```{r Plotting the mean Rating per Sex., fig.width = 4, fig.height = 2}
+## plotting the mean 'Rating' per 'Sex'
+ggplot(u_data_user, aes(x = Sex, y = Rating)) +
+  geom_boxplot()
+```
+
+...but we really shouldn't. Every `User_ID` in the data set has rated at least 20 movies, but the top contributors have contributed hundreds of ratings:
+
+```{r Determining the number of ratings by top contributors.}
+## determing the number of ratings by top contributors.
+group_by(u_data, User_ID) %>%
+  summarise(Num_Ratings = n()) %>%
+  arrange(desc(Num_Ratings)) %>%
+  slice(1:5)
+```
+
+That means that if we just plot raw means per `Sex` or `Occupation`, our results are potentially quite distorted. Instead, let's summarise by `User_ID` first, and *then* `left_join()` our `Sex` and `Occupation` information:
+
+```{r Mean Rating per User_ID per Sex., fig.width = 4, fig.height = 2}
+## plotting the mean 'Rating' per 'person'User_ID', per 'Sex'
+group_by(u_data, User_ID) %>%
+  summarise(Mean_Rating = mean(Rating)) %>%
+  left_join(u_user, by = "User_ID") %>%
+  ggplot(aes(x = Sex, y = Mean_Rating)) +
+    geom_boxplot()
+```
+
+#### Exercises
+
+(10) Create a scatterplot of users' mean `Rating` as a function of `Age`.
+
+```{r Exercise 10. Rating as a function of Age., fig.width = 4, fig.height = 2}
+## plot the mean `Rating` as a function of `Age`
+group_by(u_data, User_ID) %>%
+  summarise(Mean_Rating = mean(Rating)) %>%
+  left_join(u_user, "User_ID") %>%
+  ggplot(aes(x = Age, y = Mean_Rating)) +
+    geom_point()
+```
+
+(11) Examine the objects below. Use the 'Data Transformation' Cheatsheet to find the correct `join()` functions to create objects containing...
+
+* all the `zoo_animals` left after those `sold_animals` are sold
+* the complete list of `zoo_animals` once those in `zoo_mammals` are added
+* the `zoo_animals` that can breed with those in `exchange_animals`
+
+```{r Exercise 11. Using the join() functions., fig.width = 4, fig.height = 2}
+## use the join functions to create the objects described above
+zoo_animals <- data.frame(species = c("aardvark",
+  "armadillo", "badger"), height = c(60, 20, 25), stringsAsFactors = FALSE)
+
+sold_animals <- data.frame(species = c("aardvark", "armadillo"),
+  stringsAsFactors = FALSE)
+zoo_mammals <- data.frame(species = c("aardvark", "elephant"),
+  weight = c(52, 2700), stringsAsFactors = FALSE)
+exchange_animals <- data.frame(species = c("badger", "ostrich"),
+  stringsAsFactors = FALSE)
+
+## answer
+animals_remaining <- anti_join(zoo_animals, sold_animals, "species")
+all_animals <- full_join(zoo_animals, zoo_mammals, "species")
+breeding_animals <- inner_join(zoo_animals, exchange_animals, "species")
+```
+
+### Reshaping Data
+
+At this point, there's still one aspect of data *cleaning* and *tidying* that we haven't looked at: the ability to reshape data frames. So far, all our data has been in what people call "tidy format": Every observation has been its own row, and every variable its own column. But often, that's not the case.
+
+Take, for example, this UN data set, `marriages`. It contains, per country and sex, the percentage of the population aged 15 - 19 that's ever been married, and the 'singulate mean age at marriage', which is 'the average length of single life among those who marry before age 50':
+
+```{r Reading in the UN marriages data set.}
+## reading in the UN marriages data set
+marriages <- read.csv("input/marriages.csv", skip = 5,
+  stringsAsFactors = FALSE)
+```
+
+You'll notice that the columns here are a bit odd, with duplicate columns for "`Women`" and "`Men`". This is because the data is formatted in "wide" format: The first pair of Women-Men columns are the percentage of married 15-19 year olds, and the second pair are the mean age at marriage.
+
+This is not a format that `dplyr` or `ggplot` like very much: We can't easily plot, say, the mean age at marriage by sex, because `"Sex"` isn't explicitly a variable. For this to be properly "tidy" data, we instead need it to have columns `Country`, `Sex`, `Mean_Percent` and `Mean_Age`. Like this:
+
+```{r Reshaping by hand.}
+## creating a properly-shaped object by hand
+demo_marriages <- data.frame(
+  Country = c("Australia", "Australia", "Azerbaijan", "Azerbaijan"),
+  Sex = c("Female", "Male", "Female", "Male"),
+  Mean_Percent = c(0.8, 0.4, 8.3, 0.3),
+  Mean_Age = c(29.7, 31.6, 24.4, 28.2))
+demo_marriages
+```
+
+Using the `demo_marriages` object, we can easily create a boxplot of the mean percentage of married 15-19 year olds per sex:
+
+```{r Plotting demo_marriages., fig.width = 4, fig.height = 2}
+## plotting the mean percentage of married 15-19 year olds per sex
+ggplot(demo_marriages, aes(x = Sex, y = Mean_Percent)) +
+  geom_boxplot()
+```
+
+Obviously, re-writing the whole data set to this "long format" by hand would be a nightmare. Fortunately we can do it much quicker, using the `tidyr` package:
+
+```{r Installing tidyr, eval = FALSE}
+## installing the 'tidyr' package
+install.packages("tidyr")
+```
+
+```{r Loading tidyr, warning = FALSE}
+## loading the 'tidyr' package
+library("tidyr")
+```
+
+What does `tidyr` do? In a nutshell, it reshapes how variables are spread across rows and columns. In this case, we want to `gather()` a row into columns, which takes the arguments `data`, `key`, `value`, and `...`, the columns to gather - see `?gather` and the 'Data Transformation' cheatsheet.
+
+Here, `data` is the object we want to reshape, and `key` and `value` are the names of the new columns we want to create: In our case, say, `Sex`, and `Mean_Percent`. The columns we want to turn into rows go into the `...` argument, in our case `Women` and `Men`. So we get this:
+
+```{r Using gather() to reshape.}
+## adding a 'Sex' variable to the data for 'Mean_Percent'
+mean_percent <- gather(marriages, Sex, Mean_Percent, c(Women, Men)) %>%
+  arrange(Country.or.area)
+mean_percent[1:3, ]
+```
+
+*Now* we can plot the mean percentage of married 15-19 year olds per sex:
+
+```{r Plotting after re-shaping., fig.width = 4, fig.height = 2}
+## create a new object that gathers the mean age at marriage
+ggplot(mean_percent, aes(x = Sex, y = Mean_Percent)) +
+  geom_boxplot()
+```
+
+There's lots of complex re-shaping operations that one can do with the `tidyr` package, and that you should at least be aware of. In addition to `gather()`, there's `spread()`, for spreading columns into rows, and `separate()` and `unite()`, for separating and uniting columns, respectively. 
+
+#### Exercises
+
+(12) Explain what `gather()` does in your own words. Then create a new object, `mean_age`, that gathers the mean age at marriage just as `mean_percent` gathers the percentage of married 15-19 year olds.
+
+```{r Exercise 12. Using gather().}
+## create a new object that gathers the mean age at marriage
+mean_age <- gather(marriages, Sex, Mean_Age, c(Women.1, Men.1)) %>%
+  arrange(Country.or.area)
+```
+
+(13) The code chunk below creates an object which summarises the mean `Weight` and `Height` in the `student` data set. Create a barplot of this data, with `Mean_Height` and `Mean_Weight` on the x-axis.
+
+```{r Exercise 13. Plotting students., fig.width = 4, fig.height = 2}
+## create a barplot of Mean_Weight and Mean_Height
+student_sum <- summarise(student, Mean_Weight = mean(Weight, na.rm = TRUE),
+    Mean_Height = mean(Height, na.rm = TRUE))
+
+gather(student_sum, Variable, Value, Mean_Weight:Mean_Height) %>%
+  ggplot(aes(x = Variable, y = Value)) +
+    geom_bar(stat = "identity")
+```
+
+(14) It's also possible to `gather()` more than one column. Create a copy of the `u_item` data set that 'gathers up' all the possible genres for each movie. You can specify a range of genres the same way you could `select()` them for subsetting. Name the new columns `Genre` and `Part_Of`.
+
+```{r Exercise 14. Gather multiple columns.}
+## 'gather up' all the movie genres in u_item
+gathered_genres <- gather(u_item, Genre, Part_Of, Unknown:Western)
+gathered_genres <- arrange(gathered_genres, Movie_ID)
+
+## answer check: dim(answer) should give 31958 rows, 5 columns
+```
+
+### Putting It All Together
+
+(15) There's a file called `POP.csv` on Blackboard. For all the countries that are in both this data set and `marriages`, determine the three countries that are most likely to have the highest number of married teenage girls, in absolute numbers. For the purpose of this exercise, you may assume that teenage girls make up similar proportions of all countries.
+
+```{r Exercise 15. Putting it all together.}
+## determine the countries with the largest number of married teenage girls
+population <- read.csv("input/POP.csv",
+  skip = 5, header = FALSE, stringsAsFactors = FALSE)
+
+clean_pop <- population %>%
+  select(V4:V5) %>%
+  rename(Country = V4, Population = V5) %>%
+  mutate(Population = gsub(",", "", Population)) %>%
+  mutate(Population = as.numeric(Population))
+
+f_marriage <- marriages %>%
+  select(-Women.1, -Men.1, -Year, -Men) %>%
+  rename(Country = Country.or.area, Married_Girls = Women)
+
+married_girls <- inner_join(clean_pop, f_marriage, "Country") %>%
+  mutate(Approx_Married = Married_Girls * Population) %>%
+  arrange(desc(Approx_Married))
+
+## answer: there are 175 countries in both data sets; India, Bangladesh
+## and Nigeria probably have the highest number of married teenage girls
+```
+
+### Skills & Further Resources
+
+This worksheet has taught data cleaning and tidying.
+
+After working through it, you should be able to:
+
+1. use `which()` and `is.na()` to find errors in data sets
+2. use `gsub()` to correct input errors in data sets
+3. use `dplyr` to bind data sets together by row and column
+4. use `ifelse()` to conditionally mutate values
+5. describe general strategies for finding & fixing bad inputs
+6. use `?` to troubleshoot loading data with `read.delim()`
+7. use `dplyr` to join data sets in various ways
+8. describe the difference between binding and joining data sets
+9. use `tidyr` to gather columns into rows
+10. describe the difference between "long" and "wide" formatted data
+
+If you want a bit more information on some of these topics, I recommend:
+
+* skill 7, 9 & 10:
+    + §12 & §13 in 'R for Data Science'
+    + http://r4ds.had.co.nz
+    + by Garrett Grolemund & Hadley Wickham
+
+\newpage
+### Overview of New R Functions & Operators
+
+R code            | does what
+----------------- | ---------------------------------------------
+`bind_rows()`     | bind data frames together by row
+`ifelse()`        | conditional helper function for 'mutate'
+`full_join()`     | join data frames, retain all data, all rows
+`gather()`        | gather columns into row
+`gsub()`          | replace patterns in strings
+`left_join()`     | join data frames, left input is the base
+`read_delim()`    | read in files, `readr` style
+`which()`         | find indexes where a condition is TRUE

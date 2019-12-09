@@ -1,0 +1,750 @@
+---
+output: pdf_document
+---
+
+```{r RMarkdown setup., include = FALSE}
+knitr::opts_knit$set(root.dir = '~/Dropbox/Gitbucket/Course')
+## note: this bit of RMarkdown code is only required if you want to
+## 'knit' the worksheet to HTML or PDF
+
+## written by Elske van der Vaart, Cognitive Science & AI, Tilburg University
+```
+
+## Research Skills: Programming with R
+
+## Worksheet 4
+
+Welcome to Worksheet 4. This week we'll work on general R programming skills: Writing functions, applying functions repeatedly, and a brief introduction to *if* and *for*. Let's get started!
+
+### Writing New Functions
+
+So far, we have only been using R's built-in functions, and those added by packages like `dplyr`. But we can write our own functions too. The code chunk below shows a very simple example: `print_hello()`.
+
+```{r A first function.}
+## writing a new function
+print_hello <- function() {
+  print("Hello World!")
+}
+
+## calling the 'print_hello()' function
+print_hello()
+```
+
+Thus, to write a new function, we assign a `function() { ... }` block to a new object. Then we can execute it by adding parentheses `()` to our function name.
+
+(1) What happens if you just type `print_hello`, without adding the `()`?
+
+```{r Exercise 1. Function call without parentheses., eval = FALSE}
+## check what happens when you call a function name without the `()`
+print_hello
+
+## answer: it just prints the function definition
+```
+
+Of course, this function is still pretty boring; things don't get interesting until we add arguments. Then we can call the function with different inputs and get different results, for instance like this:
+
+```{r A function with an argument. }
+## writing a new function
+print_hello <- function(name, ending) {
+  paste0("Hello ", name, ending)
+}
+
+## calling the new 'print_hello()' function
+print_hello("Rianne", ".")
+print_hello("Group 1", "!")
+```
+
+All arguments have to be specified between the parentheses after `function`; then you can use those arguments anywhere inside the function. But not outside it - objects defined inside a function only exist inside that function. For example, trying to view the `new_number` object outside of this function fails:
+
+\newpage
+```{r Objects defined inside functions only exist there., eval = FALSE}
+## creating a function that defines an object
+add_one <- function(number) {
+  new_number <- number + 1
+  new_number
+}
+
+## calling the 'add_one' function
+add_one(5)
+
+## but the intermediate 'new_number' object doesn't exist in the workspace
+new_number
+```
+
+The opposite isn't true: Objects defined outside of a function are still available inside it. However, modifying an object inside a function won't affect the original; the function makes it own copy to work on. For example:
+
+```{r, Using an existing object inside a function.}
+## using an object that already exists in the workspace
+existing_num <- 6
+
+add_one_to <- function() {
+  existing_num <- existing_num + 1
+  existing_num
+}
+
+## demonstrating the effect of 'add_one_to'
+add_one_to()
+
+## yet, the original object still has its original value
+existing_num
+```
+
+As its output, a function always returns the result of its last line. Just creating a new object isn't enough to return it, however; you have to repeat its name. Thus, this variant `add_one` function appears to do nothing:
+
+```{r Objects must be returned.}
+## creating a function that doesn't return anything
+add_one_badly <- function(number) {
+  new_number <- number + 1
+}
+
+## calling the 'add_one_badly' function
+add_one_badly(5)
+```
+
+Alternatively, you can explicitly tell a function what object to return using a `return()` statement; as soon as a function reaches a `return()`, it immediately exits the function, and any further code is ignored:
+
+```{r Using return() in a function.}
+## demonstrating the use of a `return()` statement
+add_one_return <- function(number) {
+  return(number + 1)
+  print("note this statement is never executed!")
+}
+
+## calling the 'add_one_return' function
+add_one_return(5)
+```
+
+Like R's built in functions, you can also define defaults for your function arguments, by adding a `=` plus a default value to your `function()` definition. For instance, using its default `start_capitals = 1`, this function capitalises only the first letter of its input, but you can override that:
+
+```{r, Defining a function with default arguments.}
+## defining a function with a default argument
+capitalise <- function(input, start_capitals = 1) {
+  paste0(
+    ## capitalising the input from place 1 till the 'end_capitals' specified
+    toupper(substr(input, 1, start_capitals)),
+    
+    ## adding the rest of the input from place 'end_capitals + 1' until the end
+    substr(input, start_capitals + 1, 100000))
+}
+
+## capitalising the first, or first two letters, of a word
+capitalise("no way!")
+capitalise("ok, let's do it.", 2)
+```
+
+#### Exercises
+
+(2) Write a function that converts degrees Fahrenheit to Celsius, where Celsius = (Fahrenheit - 32) / 1.8.
+
+```{r Exercise 2. Fahrenheit to Celsius converter.}
+## write a function that converts Fahrenheit to Celsisus
+calc_Celsius <- function(degrees_F) {
+  return((degrees_F - 32) / 1.8)
+}
+
+calc_Celsius(32)
+```
+
+(3) Write a function that generates a whole number between 1 and 10 at its defaults, but where you can override the range (that is, the 1 and 10). (Hint: Use `round()` and `runif()` to do most of the work.)
+
+```{r Exercise 3. Write a random number generator.}
+## write a new random number generator
+ran_num <- function(min = 1, max = 10) {
+  round(runif(1, min, max))
+}
+
+## calling the new function
+ran_num()
+```
+
+(4) If you run the functions below, you'll seee that they produce different output. Can you explain why?
+
+\newpage
+```{r Exercise 4. Investigate paste() versus print().}
+## explain the different output of these two functions
+demonstrate_paste <- function() {
+ paste("Statement #1.")
+ paste("Statement #2.")
+}
+
+demonstrate_print <- function() {
+ print("Statement #1.")
+ print("Statement #2.")
+}
+
+## answer: paste() just returns a new character vector, so if it's not on the
+## last line of a function, it doesn't return anything, but print() explicitly 
+## prints it argument, so it prints both statements
+```
+
+### Using Functions in Practice
+
+So, why write your own functions? One major reason is that it often saves lots of typing. Let's illustrate that with a practical example, and a new data set, 'NYPD_2015.txt'. It contains all the motor vehicle accidents reported by the New York City Police Department in 2015. First, let's read it into R:
+
+```{r Loading the NYPD data set., cache = TRUE}
+## read in 'NYPD_2015.txt'
+NYPD_2015 <- read.delim("input/NYPD_2015.txt", stringsAsFactors = FALSE)
+```
+
+And let's also load `dplyr` and `ggplot2`, which we'll need later:
+
+```{r Loading packages., message = FALSE}
+## loading the 'dplyr' and 'ggplot2' packages
+library("dplyr")
+library("ggplot2")
+```
+
+As this is a new data set, let's explore it a little.
+
+(5) How many rows are in the data set? How many columns? What are the variable names? Is it clear what they all mean?
+
+```{r Exercise 5. Inspect the NYPD data set., eval = FALSE}
+## do some basic data exploration for the new 'NYPD_2015.txt' data set
+
+## see the first 5 rows
+head(NYPD_2015)
+
+## see the names of the variables
+names(NYPD_2015)
+
+## see the dimensions of the data set
+dim(NYPD_2015)
+```
+
+One thing you should notice about this data set is that it contains the `CONTRIBUTING.FACTOR` and `VEHICLE.TYPE` for up to five parties involved in each accident, spread across five different columns. So, if you wanted to find, say, all accidents involving a bicycle, you'd need to do this:
+
+```{r Filtering for bicycle. }
+## selecting the accidents that involved bicycles
+bicycle_accidents <- filter(NYPD_2015,VEHICLE.TYPE.CODE.1 == "BICYCLE" |
+    VEHICLE.TYPE.CODE.2 == "BICYCLE" | VEHICLE.TYPE.CODE.3 == "BICYCLE"|
+    VEHICLE.TYPE.CODE.4 == "BICYCLE" | VEHICLE.TYPE.CODE.5 == "BICYCLE")
+```
+
+\newpage
+That's already a pretty wordy bit of code, but if you had to do this repeatedly, filtering by different vehicles, your code would get very difficult to read. Instead, you might write a function like the one below, which lets you easily filter by all five `VEHICLE.TYPE.CODE` columns at once:
+
+```{r Defining a vehicle filtering function.}
+## filtering a data set by a specific vehicle type
+filter_by_vehicle <- function(input, vehicle_type) {
+  filter(input, VEHICLE.TYPE.CODE.1 == vehicle_type |
+      VEHICLE.TYPE.CODE.2 == vehicle_type |
+      VEHICLE.TYPE.CODE.3 == vehicle_type |
+      VEHICLE.TYPE.CODE.4 == vehicle_type | 
+      VEHICLE.TYPE.CODE.5 == vehicle_type)
+}
+```
+
+Using this function, you can easily find, say, all accidents that involved both a bus and a bicycle, as in the chunk below. Even if this was your only use of the function, you've already shortened your code considerably.
+
+```{r Using our new vehicle filtering function.}
+## filtering out all accidents that involved both buses and bicycles
+buses_vs_bicycles <- filter_by_vehicle(NYPD_2015, "BUS") %>%
+  filter_by_vehicle("BICYCLE")
+```
+
+(6) Write a function equivalent to `filter_by_vehicle` which filters by `CONTRIBUTING.FACTOR.VEHICLE`. Then create a new object which includes only accidents with `"Alcohol Involvement"`.
+
+```{r Exercise 6. Write your own filtering function. }
+## write a new function that filters by 'CONTRIBUTING.FACTOR.VEHICLE'
+filter_by_cause <- function(mushrooms, "leaves") {
+  filter(accidents, CONTRIBUTING.FACTOR.VEHICLE.1 == factor_type |
+      CONTRIBUTING.FACTOR.VEHICLE.2 == factor_type |
+      CONTRIBUTING.FACTOR.VEHICLE.3 == factor_type |
+      CONTRIBUTING.FACTOR.VEHICLE.4 == factor_type | 
+      CONTRIBUTING.FACTOR.VEHICLE.5 == factor_type)
+}
+
+## create a new object with only alcohol related causes
+alcohol_accidents <- filter_by_cause(NYPD_2015, "Alcohol Involvement")
+
+## answer check: this should be an object with 1419 rows
+```
+
+Almost as importantly, you've also made your code a bit more pleasant to read. Because the new function has a descriptive name, it's easy to understand both its definition and its use. Conversely, in the chunk below, it's difficult to see past all the `VEHICLE.TYPE.CODE` repeats to see what it actually does:
+
+```{r Filtering the old-fashioned way.}
+## filtering multiple vehicle types by hand
+buses_vs_bicycles <- filter(NYPD_2015, VEHICLE.TYPE.CODE.1 == "BICYCLE" |
+    VEHICLE.TYPE.CODE.2 == "BICYCLE" | VEHICLE.TYPE.CODE.3 == "BICYCLE" |
+    VEHICLE.TYPE.CODE.4 == "BICYCLE" | VEHICLE.TYPE.CODE.5 == "BICYCLE") %>%
+  filter(VEHICLE.TYPE.CODE.1 == "BUS" | VEHICLE.TYPE.CODE.2 == "BUS" |
+    VEHICLE.TYPE.CODE.3 == "BUS" | VEHICLE.TYPE.CODE.4 == "BUS" | 
+    VEHICLE.TYPE.CODE.5 == "BUS")
+```
+
+As another example, imagine that you received an updated 'NYPD_2015.txt' file every month, and that it was your job to produce a plot showing the number of accidents that had occurred across all five boroughs in just that month. You could filter by hand every month, or you could write a function like this:
+
+\newpage
+```{r Plot accidents by month., fig.width = 8, fig.height = 2}
+## writing the plotting function
+plot_per_borough <- function(accidents, month_number) {
+  this_month <- filter(accidents, MONTH == month_number)
+  ggplot(this_month, aes(x = BOROUGH)) +
+    geom_bar()
+}
+
+## using the new plotting function
+plot_per_borough(NYPD_2015, 3)
+```
+
+#### Exercises
+
+(7) Write a function which takes as its input a data set called 'accidents' and a vehicle type, and then creates a barplot of the total number of accidents that occurred across the five boroughs involving that vehicle type. As in the previous example, assume that 'accidents' is the `NYPD_2015` data set or some subset of it. Hint: You can of course use the 'filter_by_vehicle()' function!
+
+```{r Exercise 7. Write a plotting function., fig.width = 8, fig.height = 2 }
+## plot accidents per borough for a given vehicle type
+
+## definition of the function
+plot_vehicle_accidents <- function(accidents, vehicle_type) {
+  vehicle_accidents <- filter_by_vehicle(accidents, vehicle_type)
+  ggplot(vehicle_accidents, aes(x = BOROUGH)) +
+    geom_bar()
+}
+
+## trying it out
+plot_vehicle_accidents(NYPD_2015, "BICYCLE")
+
+## answer check: for "BICYCLE", bars are 402, 1827, 1672, 900, and 33 high
+```
+
+(8) Adapt the function from Chunk 17 so that it accepts a vector of `vehicle_types`, such as `c("SCOOTER", "MOTORCYCLE")`, and then returns all the rows that involved at least *one* of these vehicle types.
+
+```{r Exercise 8. Filtering by multiple vehicle types.}
+## adapt this function so it accepts a vector of vehicle types
+filter_by_vehicle <- function(accidents, vehicle_types) {
+  filter(accidents, VEHICLE.TYPE.CODE.1 %in% vehicle_types |
+      VEHICLE.TYPE.CODE.2 %in% vehicle_types |
+      VEHICLE.TYPE.CODE.3 %in% vehicle_types |
+      VEHICLE.TYPE.CODE.4 %in% vehicle_types | 
+      VEHICLE.TYPE.CODE.5 %in% vehicle_types)
+}
+
+## answer check: for 'c("SCOOTER", "MOTORCYCLE")', the result has 1750 rows
+```
+
+### Using Functions with mutate_at()
+
+Often, when working with data, you'll want to edit multiple columns at once. For instance, in the `NYPD_2015` data set, you might want to simplify the vehicle type codes to `UNKNOWN`, `NONE`, `NON-MOTORISED`, and `MOTORISED`.
+
+Using `table(NYPD_2015$VEHICLE.TYPE.CODE.1)`, you'll see that `UNKNOWN` is  one of the existing categories; `NONE` is indicated by `""`, `NON-MOTORISED` includes bikes and pedicabs, and `MOTORISED` covers everything else.
+
+With existing skills, you can solve this problem by writing a function that makes the required changes to a single vector, and then applying it to each `VEHICLE.TYPE.CODE` column with `dplyr`'s `mutate()` function.
+
+For example:
+
+```{r Function simplify_vehicles() for re-labeling vehicles.}
+## function to re-label vehicles types to simpler categories
+simplify_vehicles <- function(a_vector) {
+  a_vector[a_vector %in% c("BICYCLE", "PEDICAB")] <- "NON-MOTORISED"
+  a_vector[!(a_vector %in% c("NON-MOTORISED", "", "UNKNOWN"))] <- "MOTORISED"
+  a_vector
+}
+```
+
+```{r Applying the simplify_vehicles() function.}
+## applying the 'simplify_vehicles()' function to all 'VEHICLE.TYPE' columns
+NYPD_simplified <- NYPD_2015 %>%
+  mutate(VEHICLE.TYPE.CODE.1 = simplify_vehicles(VEHICLE.TYPE.CODE.1)) %>%
+  mutate(VEHICLE.TYPE.CODE.2 = simplify_vehicles(VEHICLE.TYPE.CODE.2)) %>%
+  mutate(VEHICLE.TYPE.CODE.3 = simplify_vehicles(VEHICLE.TYPE.CODE.3)) %>%
+  mutate(VEHICLE.TYPE.CODE.4 = simplify_vehicles(VEHICLE.TYPE.CODE.4)) %>%
+  mutate(VEHICLE.TYPE.CODE.5 = simplify_vehicles(VEHICLE.TYPE.CODE.5))
+```
+
+(9) Can you explain how `simplify_vehicles()` works? Try it out on the `test_vehicles` vector below. To test your understanding, create a new version, `prettify_vehicles()`, that also changes `""` to `"NONE"`.
+
+```{r Exercise 9. Investigating simplify_vehicles()., eval = FALSE }
+## vector of vehicle types to test `simplify_vehicles()` with
+test_vehicles <- c("VAN", "VAN", "BUS", "BICYCLE", "", "UNKNOWN", "TAXI")
+
+## testing it out
+simplify_vehicles(test_vehicles)
+
+## new function
+prettify_vehicles <- function(a_vector) {
+  a_vector[a_vector %in% c("BICYCLE", "PEDICAB")] <- "NON-MOTORISED"
+  a_vector[a_vector == ""] <- "NONE"
+  a_vector[!(a_vector %in% c("NON-MOTORISED", "NONE",
+    "UNKNOWN"))] <- "MOTORISED"
+  a_vector
+}
+
+## testing new function
+prettify_vehicles(test_vehicles)
+```
+
+This solution still involves a lot of repetitive code, though, doesn't it? Thankfully, `dplyr` offers an easy solution to this: The `mutate_at()` function, which applies a specific function to a specific range of columns.
+
+You can find `mutate_at()` on the 'Data Transformation' cheatsheet, under Help > Cheatsheets, and `?mutate_at` will also give you some idea of how it works. But it's most easily understood with an example. Using `dplyr`'s `mutate_at()`, we can shorten the previous solution to this:
+
+```{r Using mutate_at() with simplify_vehicles().}
+## using mutate_at() with simplify_vehicles()
+NYPD_simplified_II <- mutate_at(NYPD_2015, vars(contains("VEHICLE.TYPE.CODE")),
+  funs(simplify_vehicles))
+```
+
+Basically, `mutate_at()` takes three arguments: A data set, a function `vars()` and a function `funs()`. Here, `vars()` has as its argument a `select()` helper function, to define the columns to work with, and `funs()` has as its argument the name of the function that should be applied to those columns.
+
+This works with built-in functions as well as with self-written ones; for example, imagine you wanted to change the `DATE`, `TIME` and `YEAR` columns to `factor()` so that `ggplot()` would treat them as discrete variables:
+
+```{r Using mutate_at() with a built-in function.}
+## using mutate_at() with factor()
+NYPD_fac_date <- mutate_at(NYPD_2015, vars(DAY:YEAR), funs(factor))
+```
+
+If the function you wish to apply has additional arguments, you can specify them after the `funs()` function. For instance, to round off the `LATITUDE` and `LONGITUDE` columns to 3 digits, you can do this:
+
+```{r Passing additional arguments to the function in mutate_at(). }
+## rounding off the location columns to 3 digits
+NYPD_short_loc <- mutate_at(NYPD_2015, vars(LATITUDE:LONGITUDE),
+  funs(round), digits = 3)
+```
+
+#### Exercises
+
+(10) Create a copy of `NYPD_2015` where all instances of `""` in the `VEHICLE.TYPE.CODE` and `CONTRIBUTING.FACTOR` columns are changed to `"NONE"`.   
+```{r Exercise 10. Add NONEs.}
+##  change all instances of "" in ten columns to "NONE"
+
+## function to re-place all instances of ""
+change_to_none <- function(vector) {
+  vector[vector == ""] <- "NONE"
+  vector
+}
+
+## using the new `change_to_none` function with the original data set
+NYPD_none <- mutate_at(NYPD_2015, vars(contains("VEHICLE")),
+  funs(change_to_none))
+```
+
+(11) Create a copy of `NYPD_2015` where all the `STREET` columns are shortened to the first 10 characters. (Hint: Remember `substr()`?)
+
+```{r Exercise 11. Shorten street names.}
+## shorten all streetnames to 10 characters
+NYPD_short_streets <- mutate_at(NYPD_2015, vars(contains("STREET")),
+  funs(substr), start = 1, stop = 10)
+```
+
+(12) In addition to `mutate_at()`, `dplyr` also offers `mutate_all()`, which applies a function to *all* columns in a data set. Use the cheatsheet to figure out how to do this, and then convert all columns in the data set to lower case. (This won't affect the numeric columns, but that is okay.)
+
+```{r Exercise 12. Convert to lowercase using mutate_all.}
+## convert to lowercase using mutate_all
+NYPD_allcaps <- mutate_all(NYPD_2015, funs(tolower))
+```
+
+### Using Functions with apply()
+
+Using `mutate_at()`, you can apply a function to a series of columns simulteanously. But what if you want to handle a series of *rows* simulteanously? There are a few `dplyr` approaches to this, but they're not terribly straightforward. Instead, let's use this opportunity to try `apply()`.
+
+If you look at `?apply()`, you'll see that it accepts four arguments: a dataframe `X`, a `MARGIN`, which is 1 for rows and 2 for columns, a function called `FUN`, and then, optionally, additional arguments to `FUN`, using `...`.
+
+This means that `apply()` with `MARGIN = 2` is very similar to `mutate_at()`. However, there are a number of small yet frustrating differences. You can't easily specify the range of columns to work on, and `apply()` doesn't return a data frame, but a *matrix*, which is basically a multi-dimensional vector.
+
+So, if you like `mutate_at()`, it's probably never necessary to use `apply()` for columns. But it's worth understanding its use for rows, as there are some problems that are  awkward to solve without it. It's also a function that you'll see a lot in Stackoverflow answers, so it's a good R trick to know.
+
+For instance, in this data set, what if you wanted to calculate the *number* of vehicles involved in each accident? This information is implicitly included in the `VEHICLE.TYPE.CODE` columns: Each row of these five columns contains either a vehicle type, `UNKNOWN` or a `""`, which indicates "none".
+
+Thus, to calculate the number of vehicles involved per accident, we need to count up, for each row, all the `VEHICLE.TYPE.CODE` entries that aren't a `""`. There's at least one way to do it using your existing skills, and Worksheet 5 presents another approach, but the most straightforward is `apply()`.
+
+(13) Can you add a `NUM.VEHICLES` column to a copy of the `NYPD_2015` data set without using `apply()` or Google? This is a tricky one; skip it if you're struggling, and ask for a hint if you're keen but stuck.
+
+```{r Exercise 13. Calculate the number of vehicles involved in each accident.}
+##  calculate the number of vehicles involved in each accident
+
+## function to replace all vehicle type codes with 0 or 1
+discretize_vehicles <- function(vector) {
+  vector[vector == ""] <- 0
+  vector[vector != 0] <- 1
+  vector <- as.numeric(vector)
+  vector
+}
+
+## applying the `discretize_vehicles()` function to the original data set,
+## and count up the number of 1s across 'VEHICLE.TYPE.CODE' columns
+NYPD_vehicles <- mutate_at(NYPD_2015, vars(contains("VEHICLE.TYPE.CODE")),
+  funs(discretize_vehicles)) %>%
+  mutate(NUM.VEHICLES = VEHICLE.TYPE.CODE.1 + VEHICLE.TYPE.CODE.2 +
+      VEHICLE.TYPE.CODE.3 + VEHICLE.TYPE.CODE.4 + VEHICLE.TYPE.CODE.5)
+```
+
+So, how do we use `apply()` to count the number of `VEHICLE.TYPE.CODE` entries that aren't `""`? First, let's write a function that does it for a single row, assuming it's fed only the `VEHICLE.TYPE.CODE` columns:
+
+```{r Counting non-empty vehicle type codes.}
+## function to count the number of non-empty `VEHICLE.TYPE.CODE` columns
+count_non_empty <- function(row_of_vehicles) {
+  sum(row_of_vehicles != "")
+}
+```
+
+Here, `row_of_vehicles != ""` will generate `TRUE` or `FALSE` for each element of the vector `row_of_vehicles`, and then `sum()` counts them up, with each `TRUE` corresponding to 1 and `FALSE` to 0.
+
+(14) Do you understand the `count_non_empty()` function? Try calling it on the `demo_vehicles` vector below. Is the answer right?
+
+```{r Exercise 14. Investigating count_non_empty().}
+## try count_non_empty() on a demonstration vector
+demo_vehicles <- c("AMBULANCE", "BUS", "", "", "")
+
+## answer: yes, the answer is right
+count_non_empty(demo_vehicles)
+```
+
+Now, we need to figure out which columns of the `NYPD_2015` data frame to apply this function to. Let's use `grepl()`, from Worksheet 2. In `?grepl()`, you'll see that it returns `TRUE` everywhere a *pattern* is in a vector *x*.
+
+Thus, with `grepl("VEHICLE.TYPE.CODE", names(NYPD_2015))`, we will get a `TRUE` everywhere `"VEHICLE.TYPE.CODE"` is part of `NYPD_2015`'s column names.
+
+```{r Finding the `VEHICLE.TYPE.CODE` columns.}
+## showing the first 5 rows of NYPD_2015's 'VEHICLE.TYPE.CODE' columns
+NYPD_2015[1:5, grepl("VEHICLE.TYPE.CODE", names(NYPD_2015))]
+```
+
+Finally, we can use our `count_non_empty()` function on all rows of the `NYPD_2015` data frame by using `apply()` with `MARGIN = 1` on all of its `VEHICLE.TYPE.CODE` columns. This produces a vector of totals, `num_vehicles`, which we can add to the original dataframe as a new variable.
+
+```{r Using apply.}
+## using the new `count_non_empty` function with the original data set
+num_vehicles <- apply(NYPD_2015[, grepl("VEHICLE.TYPE.CODE",
+  names(NYPD_2015))], 1, count_non_empty)
+
+## adding the totals calculated as a new variable
+NYPD_2015$NUM.VEHICLES <- num_vehicles
+```
+
+\newpage
+#### Exercises
+
+(15) Use `count_non_empty()` and `apply()` to calculate the number of known contributing factors per accident. Add this information to a copy of the `NYPD_2015` data set in a column called `NUM.CAUSES.KNOWN`. 
+
+```{r Exercise 15. Count contributing factors.}
+## count the number of contributing factors for each accident
+NYPD_causes <- NYPD_2015
+NYPD_causes$NUM.CAUSES.KNOWN <- apply(NYPD_2015[, grepl("CONTRIBUTING.FACTOR",
+  names(NYPD_2015))], 1, count_non_empty)
+
+## answer check: new_object$NUM.CAUSES.KNOWN[1:5] should now give 5, 1, 2, 2, 2
+```
+
+(16) Use this general approach to create a new variable in the data set called `ROAD.RAGERS`, which sums up, for each accident, the number of involved drivers suffering from `"Aggressive Driving/Road Rage"`.
+
+```{r Exercise 16. Count road ragers.}
+## count the number of road ragers involved in each accident
+
+## a general function which looks for `cont_factor` in `col_indexes`
+count_contributing_factor <- function(row_of_df, cont_factor) {
+  sum(row_of_df == cont_factor)
+}
+
+## create the new variable
+NYPD_2015$ROAD.RAGERS <- apply(NYPD_2015[, grepl("CONTRIBUTING.FACTOR",
+  names(NYPD_2015))], 1, count_contributing_factor,
+  "Aggressive Driving/Road Rage")
+
+## answer check: table(NYPD_2015$ROAD.RAGERS) should show 53 accidents
+## with two aggressive drivers
+```
+
+### Final Notes: If & For
+
+Using functions, `mutate_at()` and `apply()`, you can, in theory, solve most R problems that involve dataframes. But there's two last programming tricks you should at least be aware of. One is `if ()`. Basically, `if ()` allows you to make conditional statements: If A is true, do X. Otherwise, do Y. Like so:
+
+The `else` part is optional; just `if ()` works too. But if you include it, make sure it's right after the `}`.
+
+```{r Simple if () demonstration.}
+## simple if () demonstration
+num_A <- 1
+num_B <- 2
+
+if (num_A > num_B) {
+  print(num_A)
+} else {
+  print(num_B)
+}
+```
+
+\newpage
+(17) Can you turn the example above into a function which accepts two numbers as input, and then returns whichever number is higher?
+
+```{r Exercise 17. Using if () in a function.}
+## define a function which accepts two numbers, and prints the higher one
+show_higher <- function(num_A, num_B) {
+  if (num_A > num_B) {
+    return(num_A)
+  } else {
+    return(num_B)
+  }
+}
+
+## demonstrating the new function
+show_higher(16, 2)
+```
+
+The other trick is `for ()`, which is used to create loops. Put very simply, with `for ()` you define a vector of items, and then do *something* for each item inside that vector. You keep track of which item you're working on using an index, which automatically keeps changing to the next item in the vector.
+
+So, in the example below, the vector of items is `my_numbers`, and `i` keeps changing to the next item.
+
+```{r Simple for () demonstration., eval = FALSE}
+## simple for () demonstration
+my_numbers <- c(1:10)
+
+for (i in my_numbers) {
+  print(paste("Number", i))
+}
+```
+
+In many programming languages, `if ()` and `for ()` are two of the first constructs you'll learn; but in R, you only rarely need them. Instead, you can solve most problems using built-in functions together with vectorisation, i.e., the fact that you can use most operators with whole vectors at once.
+
+However, sometimes you might find `if ()`, in particular, necessary or convenient to use. For instance, let's say that you wanted to write a function which would plot in color or in black and white, depending on the argument `online_only`. Using `if ()`, you could do it like this:
+
+```{r Function using if ()., fig.width = 8, fig.height = 2 }
+## plot in color, or not, based on the `online_only` argument
+plot_per_borough <- function(accidents, month_number, online_only) {
+  this_month <- filter(accidents, MONTH == month_number)
+  
+  if (online_only) {
+    ggplot(this_month, aes(x = BOROUGH, fill = BOROUGH)) +
+      geom_bar()
+  } else {
+    ggplot(this_month, aes(x = BOROUGH)) +
+      geom_bar()
+  }
+}
+
+## trying the new function out
+plot_per_borough(NYPD_2015, 1, TRUE)
+```
+
+For more complex data operations, it's usually best to avoid `if ()` and `for ()` if possible, as they're relatively slow. 'Under the hood', alternative solutions using vectorisation and `apply()` do a lot of their work in another programming language like C, which is much faster to execute than R.
+
+Below, you can try out a few practice exercises involving `if ()`. This course won't discuss `for ()` in any further detail, or require you to use it in the homework assignments. But you are certainly free to use it if you know how; just bear in mind that *often*, some other solution is likely more efficient.
+
+#### Exercises
+
+(18) Write a function which accepts two inputs, a dataframe and a string. If the string equals `"cols"`, it should return the number of columns in the data set; otherwise, it should return the number of rows.
+
+```{r Exercise 18. Return the width or length of a dataframe. }
+## write a function that returns a dataframe's width or length
+df_size <- function(input_df, dimension) {
+  if (dimension == "cols") {
+    return(ncol(input_df))
+  } else {
+    return(nrow(input_df))
+  }
+}
+```
+
+(19) Write a function called `shorten()` which accepts a single vector as its input. If the input `is.numeric()`, it should round the input off to 1 digit. If it `is.character()`, it should retain only the first 6 characters. Otherwise, it should return the vector in the same form as it came in.
+
+```{r Exercise 19. Use if () to differentiate numeric and character vectors.  }
+## round off numbers, take a substring of characters
+shorten <- function(input_vector) {
+  if (is.numeric(input_vector)) {
+    return(round(input_vector, 1))
+  } else {
+    if (is.character(input_vector)) {
+      return(substr(input_vector, 1, 6))
+    }
+  }
+  return(input_vector)
+}
+```
+
+### Putting It All Together
+
+(20)  For this 'Putting It All Together' exercise, use the filtered `flights` data set read in below. This is a lightly edited version of data taken from the website of the United States Bureau of Transportation. It contains details on all US flights leaving New York airports in January 2017.
+
+This data set is mostly self-explanatory. Note that the `DAY_OF_WEEK` column runs from 1 = Monday to 7 = Sunday, `DISTANCE` is in miles, and that all times, i.e., `TAXI_IN`, `WEATHER_DELAY`, etc., are in minutes.
+
+(a) Create a function that accepts three arguments: A dataframe and two strings of characters. Assume that the dataframe is equivalent to the `flights` data set, and that the strings are an `ORIGIN` and `DEST` airport, respectively. The function should create a boxplot of `AIR_TIME` per `CARRIER` for that route.
+
+(b) Create a copy of `flights` where all the time-based columns - that is,`DEP_DELAY`, `TAXI_OUT`, `TAXI_IN`, `ARR_DELAY`, `ACTUAL_ELAPSED_TIME`, `AIR_TIME`, `CARRIER_DELAY`, `WEATHER_DELAY`, `SECURITY_DELAY` and `LATE_AIRCRAFT_DELAY` - are converted to hours instead of minutes.
+
+(c) Create a copy of `flights` with a new column, `DELAY_CAUSE`. This should contain `NA` if `ARR_DELAY` is 0 or lower; `"KNOWN"` if the sum of `CARRIER_DELAY`, `WEATHER_DELAY`, `SECURITY_DELAY` and `LATE_AIRCRAFT_DELAY` is at least equal to `ARRIVAL_DELAY`, and `"UNKNOWN"` otherwise.
+
+```{r Exercise 20. Putting it all together.}
+## solve the problems described above
+flights <- read.delim("input/flights.txt", stringsAsFactors = FALSE) %>%
+  filter(CANCELLED == 0, DIVERTED == 0)
+
+## plot the airtime per origin and destination
+plot_air_time <- function(flights, origin, dest) {
+  carrier_flights <- filter(flights, ORIGIN == origin, DEST == dest)
+  ggplot(carrier_flights, aes(x = CARRIER, y = AIR_TIME)) +
+    geom_boxplot()
+}
+
+## answer check: your_new_function(flights, "JFK", "LAX") should
+## produce boxplots for the carriers AA, B6, DL and VX
+
+## convert all time-based columns to hours instead of minutes
+change_mins_to_hours <- function(values) {
+  values <- values / 60
+  values
+}
+
+flights_in_hours <- mutate_at(flights, vars(-c(YEAR:DEST_CITY_NAME,
+  DEP_TIME_BLK, ARR_TIME_BLK:DIVERTED, DISTANCE)), funs(change_mins_to_hours))
+
+## add a `CAUSE_DELAY` column
+determine_delay <- function(delays) {
+  cause_of_delay <- "UNKNOWN"
+  delay <- delays[2]
+  explained_delay <- sum(delays[3:6], na.rm = TRUE)
+  if (delay <= 0) {
+    cause_of_delay <- NA
+  } else {
+    if (explained_delay >= delay) {
+      cause_of_delay <- "KNOWN"
+    }
+  }
+  cause_of_delay
+}
+
+delays <- flights
+delays$DELAY_CAUSE <- apply(flights[, grepl("DELAY", names(flights))], 1,
+  determine_delay)
+
+## answer check: your_new_object[c(1, 2, 44, 55), c(13, 20:24)] should
+## show `DELAY_CAUSE` UNKNOWN, NA, KNOWN and KNOWN, respectively
+```
+
+### Skills & Further Resources
+
+This worksheet has introduced writing functions, using `mutate_at()`, using `apply()` and using `if ()`.
+
+After working through it, you should be able to:
+
+1. write your own functions
+2. explain why functions are useful
+3. use default arguments in functions
+4. use `mutate_at()` to apply functions across columns
+5. use `apply()` to apply functions across rows
+6. use `if ()` to conditionally execute code 
+
+If you want a bit more information on some of these topics, I recommend:
+
+* skill 1 - 2, a simple introduction:
+    + §19 in 'R for Data Science'
+    + http://r4ds.had.co.nz
+    + by Garrett Grolemund & Hadley Wickham
+    
+* skill 1, a more in-depth look:
+    + §1.4 in 'Introduction to R'
+    + https://ramnathv.github.io/pycon2014-r/#
+    + by Ramnath Vaidyanathan, McGill University
+
+* skill 1 - 3, 6:
+    + §16.2 & §16.3 in 'YaRrr! The Pirate's Guide to R'
+    + https://bookdown.org/ndphillips/YaRrr/
+    + by Nathaniel D. Phillips, ex-University of Basel
+
+### Overview of New R Functions & Operators
+
+R code           | does what
+---------------- | ---------------------------------------------
+`apply()`        | apply a function across rows or columns
+`if ()`          | conditionally execute code
+`for ()`         | repeatedly execute code
+`function()`     | create a new function
+`grep()`         | return the *indexes* where a pattern occurs in a vector
+`length()`       | count the number of items in a vector
+`mutate_all()`   | mutate a series of columns
+`mutate_at()`    | mutate a series of columns
+`return()`       | return a value and exit a function

@@ -1,0 +1,688 @@
+---
+output: pdf_document
+---
+
+```{r RMarkdown setup., include = FALSE}
+knitr::opts_knit$set(root.dir = '~/Dropbox/Gitbucket/Course')
+## note: this bit of RMarkdown code is only required if you want to
+## 'knit' the worksheet to HTML or PDF
+
+## written by Elske van der Vaart, Cognitive Science & AI, Tilburg University
+```
+
+## Research Skills: Programming with R
+
+## Worksheet 6
+
+Welcome to Worksheet 6, the final worksheet. Last week we worked on cleaning and tidying data sets; this week, we're going to fit some models. Mainly, we'll focus on *classification*, using the all-purpose machine learning package `caret`. There won't be much theory on the actual models used; instead, the focus is on general R model-fitting skills that will be useful regardless of the type of model you wish to fit.
+
+### Classification: Introduction
+
+Classification is the problem of assigning new observations to categories, based on some set of observed inputs. For example, one might wish to predict if an incoming e-mail is spam or not, if a loan request is going to be approved or not, or if a patient is likely to recover or not.
+
+In *statistics*, the observed inputs are usually known as *explanatory variables*, while in *machine learning*, they are referred to as *features*. These might contain, for example, the words in the e-mail, the credit history of the loan requester, or the symptoms in the patient.
+
+In classification, how these inputs map to the subsequent *outcomes* is learned from *data* - previous observations where the outcome is known. There are lots of different models and algorithms for doing so; in this worksheet, we'll focus on *k-nearest neighbors* and *logistic regression*.
+
+We'll do this using a new data set, called `income`. It's a heavily edited version of the `adult` data set that's freely available from the UCI Machine Learning Repository. The `income` data set contains demographic information extracted from US census records in 1994. Let's read it into R:
+
+```{r Reading in the income data set., message = FALSE, warning = FALSE}
+## reading in 'income`
+income <- read.delim("input/income.txt", stringsAsFactors = FALSE)
+```
+
+The *classification problem* presented by the `income` data set is to predict the `income` class of a given person - over or under $50.000 a year - using the other 11 variables in the data set. Unfortunately, the data set isn't terribly well-documented, but here's a quick overview of what they (seem to) mean:
+
+variable           | encodes what
+-------------------| ---------------------------------------------
+age                | age
+workclass          | government sector, private sector, or self-employed
+education.num      | years of education
+marital.status     | married, never married, divorced or separated
+occupation         | work sector
+race               | race
+sex                | sex
+capital.gain       | asset growth, in dollars
+capital.loss       | asset loss, in dollars
+hours.per.week     | hours worked per week
+native.country     | US or non-US born
+
+Let's also load the `ggplot2` and `dplyr` packages while we're at it; we'll need them later!
+
+```{r Loading `ggplot` and `dplyr`., message = FALSE, warning = FALSE}
+## loading 'ggplot' and 'dplyr'
+library("ggplot2")
+library("dplyr")
+```
+
+\newpage
+#### Exercises
+
+(1) Before fitting any models, let's see if we can get an intuitive sense of which explanatory variables predict `income`. Here's one possible exploratory plot, with a new `position` argument, `position = "fill"`. What does it do? What can you conclude from it about sex, marital state and income?
+
+```{r Exercise 1. Exploratory plot., fig.width = 8, fig.height = 2}
+## exploratory plot relating sex, marital state and income
+ggplot(income, aes(x = marital.status, fill = income)) +
+  geom_bar(position = "fill") +
+  facet_grid(. ~ sex) +
+  scale_x_discrete("Marital Status") +
+  scale_y_continuous("Proportion of Cases") +
+  theme(legend.position = "top")
+
+## answer: `position = "fill"` normalises the heights of bars to proportions,
+## instead of counts; this plot shows that being male and being married,
+## most importantly, correlate with higher odds of making over $50.000
+```
+
+(2) Do a bit more general exploration of the `income` data set. How many observations does it have? What are the values in the various variables? Are there any missing values? Can you draw any other informative plots to help clarify the relationship between the explanatory variables and `income`?
+
+```{r Exercise 2. Further data exploration., eval = FALSE}
+## do a bit more general exploration of the `income` data set
+
+## there are 30139 observations in the data set
+dim(income)
+
+## there are no NAs in the data set; the various variables are not equally
+## distributed, e.g., mostly private sector, more men, mostly US, more < .50k
+apply(income, 1, table, useNA = "always")
+
+## older people are more likely to make over $50.000
+ggplot(income, aes(x = age, color = income)) +
+  geom_line(stat = "count")
+
+## highly educated people are more likely to make over $50.000
+ggplot(income, aes(x = education.num, color = income)) +
+  geom_line(stat = "count")
+
+## people who work more hours are more likely to make over $50.000
+ggplot(income, aes(x = hours.per.week, fill = income)) +
+  geom_histogram(position = "fill")
+```
+
+\newpage
+### The `caret` Package & Data Partitioning
+
+So, now that we have a data set and a classification problem, how can we actually fit some models?
+
+One attractive option is through the R package `caret`. It's basically a 'wrapper' package that calls on many other R packages to fit different kinds of models using one consistent interface. In addition, `caret` offers a variety of utility functions for easily fitting models and inspecting their outputs.
+
+Let's install `caret` now, as well as some of the packages that it makes use of; other than `caret` itself, we won't need to load them explicitly, but they do need to be available on your machine:
+
+```{r Installing the caret package., eval = FALSE}
+## installing the 'caret' package, and some of the packages it makes use of
+install.packages("caret")
+install.packages("e1071")
+install.packages("MLmetrics")
+install.packages("mlbench")
+install.packages("ModelMetrics")
+```
+
+```{r Loading the caret package., message = FALSE, warning = FALSE}
+## loading the 'caret' package
+library("caret")
+```
+
+Now, before we move on, let's make use of one of `caret`'s utility functions: `createDataPartition()`. We can use this to split our data set into a *training* and *test* set. The basic idea is that we'll use our training set to actually fit and compare various models, and then once we're satisfied, we'll report their success on a new, unseen data set, to get a sense of how well our model will perform 'in the wild', on data it wasn't trained on.
+
+First, let's cut our the size of our complete data set a little, to speed things up later. We'll use `dplyr`'s `sample_frac()` function, which lets us automatically sample 20% of our data set - see `?sample_frac()`:
+
+```{r Creating a smaller data set.}
+## sample 20% of the data in the 'adult' data set
+set.seed(1)
+income_frac = sample_frac(income, size = 0.2, replace = FALSE)
+```
+
+(Note the `set.seed()` call; we're setting the 'seed' for R's random number generator, ensuring that the same split is produced each time the code is run.)
+
+Now, let's use `createDataPartition()`. It generates row indexes corresponding to a proportion `p` of all rows in a given data set. We can then subset our original data by these indexes to create our training set, `trn_income`, and subset it by their inverse to create our test set, `tst_income`.
+
+```{r Using createDataPartition().}
+## generating a train -and testsest
+set.seed(1)
+trn_index = createDataPartition(y = income_frac$income, p = 0.70, list = FALSE)
+trn_income = income_frac[trn_index, ]
+tst_income = income_frac[-trn_index, ]
+```
+
+We have now designated 70% of `income_frac` as training data, and the remainder, or 30%, as test data.
+
+The main advantage of `createDataPartition()` is that it lets you specify a variable, its `y` argument, that should be distributed equally across the training and test set. Generally, what you'll want to specify here is the outcome that you're trying to predict, in our case `income_frac$income`.
+
+For example, by this point, you've hopefully noticed that our total data set is about 25% `income` over $50.000, and 75% under. It would be bad if all our rich people happened to end up in our training set - our model wouldn't be trained on representative data. Using `createDataPartition()` prevents this.
+
+\newpage
+#### Exercises
+
+(3) Can you think of a reason why it might be important to sample your data randomly when you want to reduce its size or when splitting it into a train and test set? Instead of, say, just taking the first so many rows?
+
+```{r Exercise 3. Why sample randomly?.}
+## why sample data sets randomly?
+
+## answer: the data may not be organized randomly; i.e., in this case, records
+## might have been added to the file by state; then just taking sequential
+## samples might cause the training and test set to be qualitatively different
+```
+
+(4) After looking at `?sample_frac`, create a new object called `income_1e4` which contains exactly 10.000 randomly sampled rows - and do this in the most straightforward way, not by setting `size = 0.331796`!
+
+```{r Exercise 4. Subset `income` to exactly 10000 random rows.}
+## subset 10,000 randomly sampled rows from `income`
+set.seed(1)
+income_1e4 <- sample_n(income, 10000)
+```
+
+(5) Can you explain what's happening in `createDataPartition()`? Further split the `tst_income` object into two non-overlapping partitions, `fsplit_1` and `fsplit_2`, which contain 60% and 40% of `tst_income`, respectively.
+
+```{r Exercise 5. Further splits using createDataPartition().}
+## split 'tst_income' into 'fsplit_1' (60%) and 'fsplit_2' (40%)
+set.seed(1)
+spl_index = createDataPartition(y = tst_income$income, p = 0.60, list = FALSE)
+fsplit_1 = tst_income[spl_index, ]
+fsplit_2 = tst_income[-spl_index, ]
+
+## answer check: nrow(fsplit_1) should be 1085, nrow(fsplit_2) should be 723
+```
+
+### K-Nearest Neighbors & Cross Validation
+
+To tackle our classification problem, let's first try *k-nearest neighbors*. For every new observation, this algorithm determines the *k* nearest neighbors - the data points that are closest to the new observation in the variable space - and then takes a vote amongst them on the class of the new observation.
+
+For example, for our income data set, if `k = 5`, and a new observation's five closest neighbors in terms of `age`, `education.num` and so on are three people who make over $50.000 and two who make less, the k-nearest neighbor algorithm would predict that this new person falls into the `over.50k` class also.
+
+Now, let's actually fit a `"knn"` model using `caret`'s `train()` function:
+
+```{r Using train() from `caret` to fit a k-nearest neighbors model.}
+## using the train() function from `caret` to fit a `"knn"` model
+set.seed(1)
+income_knn = train(income ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5))
+```
+
+There's a few things to unpack here. The first argument, `income ~ .`, specifies the model we're trying to fit - in this case, `income` based on all other variables in the data set, indicated by the `.`. This specification uses R's *formula interface*, which we'll get to in a minute. The `method` and `data` arguments are relatively straightforward, but what's `trControl`? It's telling `train()` to fit our model using *cross validation*. 
+
+The basic idea behind cross validation is to further divide one's training data into $n$ partitions, or *folds*, and then to repeatedly use $(n - 1)$ of those partitions for training while reserving the $nth$ partition for testing. That's done $n$ times, setting aside each partition as the 'test set' exactly once.
+
+(6) Is it now clear what the `number` argument to `trainControl()` means? Create a new `"knn"` model that predicts `sex` based on all other variables, using `train()` and 10-fold cross validation.
+
+```{r Exercise 6. Predict `sex` using 10-fold cross validation.}
+## predict `sex` using 10-fold cross validation
+set.seed(1)
+sex_knn = train(sex ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 10))
+```
+
+The point of this is to train the model as robustly as possible - to already get an idea of how well it's going to perform on unseen data *without* making use of the test set that's been set aside for the final model assessment. Essentially, it helps you avoid 'overfitting' the data that you happen to have.
+
+Let's look at our `income_knn` object and see what `train()` has done for us.
+
+```{r Printing the `income_knn` object. }
+##  printing the `income_knn` object
+income_knn
+```
+
+Aha! It appears that `train()` has tried 3 different values for *k* - 5, 7 and 9 - and then used the average 'accuracy' of each 'fold' of our cross validation procedure - each further split of our training data into a training and test set - to choose the value of *k* that seems to perform best.
+
+That's pretty great - `train()` is automatically optimising our model's parameters for us; in this case there's just one, *k*, the number of neighboring observations to look at when taking the 'vote' on the prediction, and then reporting back the average cross validated accuracy.
+
+But what *is* the `income_knn` object, actually? Typing its name at the console is giving us a nice summary of its main results, but isn't there more to it? There is, actually - a *lot* more. Let's try `str(income_knn)`:
+
+```{r Looking at the structure of the `income_knn` object., eval = FALSE }
+##  looking at the structure of the `income_knn` object
+str(income_knn)
+```
+
+Woa! It appears that `income_knn` is actually a `list()` of 24 items, with lots of information on the data used, the analysis performed, and the results obtained. For the most part you don't have to worry about this, but sometimes it's nice to be able to 'pull out' specific parts of an analysis automatically.
+
+For instance, let's say you wanted to write a function that would plot the results of a `knn` model fit with `train()`, with a bar for each value of *k* tried, and the height representing that value's accuracy. You could obviously copy the values from the summary by hand, but that would be suboptimal.
+
+\newpage
+Instead, I suggest typing `income_knn$` at the **Console** prompt and seeing what items come up - if you hunt around, you'll see that you can extract the mean 'accuracy' for each *k* from the `income_knn$results` item. Then you can write your generic function for plotting mean `accuracy` per `k`:
+
+```{r Writing a custom knn plot function., fig.width = 8, fig.height = 2}
+##  writing a custom plot function for knn models
+plot_knn_results <- function(fit_knn) {
+  ggplot(fit_knn$results, aes(x = k, y = Accuracy)) +
+    geom_bar(stat = "identity") +
+    scale_x_discrete("value of k", limits = fit_knn$results$k) +
+    scale_y_continuous("accuracy")
+}
+
+## creating the plot: little difference in accuracy in this case!
+plot_knn_results(income_knn)
+```
+
+#### Exercises
+
+(7) If you look at `income_knn$resample`, you'll see that it shows one `accuracy` per fold. The average of these is equal to the 'accuracy' of the best-fitting model, in this case `k = 5`. Using `?trainControl`, train a new `income_knn_acc` that returns *all* the accuracies per fold, one per *k*.
+
+```{r Exercise 7. Return accuracy per fold and k.}
+## train a new income_knn object that returns accuracy per fold and k
+set.seed(1)
+income_knn_acc = train(income ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5, returnResamp = "all"))
+
+## answer check: income_knn_acc$resample should now show 15 rows, with headers
+## Accuracy, Kappa, k and Resample
+```
+
+(8) So far we've only talked about `"knn"` predicting binary outcomes, e.g. over or under $50.000. But you can use `"knn"` just as easily to classify observations into multiple classes. Fit a model predicting `occupation` on the basis of all other variables, using 5-fold cross validation. Extract the best value of *k* and store it in a new object, `best_k`.
+
+```{r Exercise 8. Use `"knn"` with multiple classes..}
+## use `knn` to predict 'occupation' & extract the best 'k'
+set.seed(1)
+occupation_knn = train(occupation ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5))
+best_k <- occupation_knn$bestTune$k
+
+## answer check: if you use set.seed(1) before fitting your model,
+## str(best_k) should produce 'int 9'
+```
+
+### Logistic Regression & Dummy Variables
+
+One of the main advantages of the `caret` package is that you can fit many different models in exactly the same way. After `'"knn"`, let's try using *logistic regression* to predict `income` on the basis of all the other variables in the data set, again using `train()`:
+
+```{r Using train() from `caret` logistic regression model.}
+## using the train() function from `caret` to fit a logistic regression model
+set.seed(1)
+income_lgr = train(income ~ ., method = "glm",
+  family = binomial(link = "logit"), data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5))
+```
+
+We need to specify `method = "glm"`, for 'generalised linear model', as well as `family = binomial(link = "logit")`; this is an extra argument to the `"glm"` model fitting procedure. It specifies that this is a two class problem - under or over $50.000 income - and that we wish to solve it with logistic regression.
+
+Logistic regression is a form of regression adapted to classification problems. It assumes a linear relationship between the explanatory variables and *response*, here `income`, and then to fit the model, it converts between the binary response and a continuous probability using the `logit` function.
+
+Unlike `"knn"`, logistic regression doesn't have any model parameters to fit; instead it estimates an *intercept* and *coefficients*. The intercept encodes the value of the response when all predictors are 0, and the coefficients reflect the relationship between the predictors and the response.
+
+Thus, if we check `income_lgr`, there's one value for 'accuracy' - the average over 5-fold cross validation.
+
+```{r Printing the `income_lgr` object., eval = FALSE}
+## printing the `income_lgr` object
+income_lgr
+```
+
+To see the intercepts and coefficients - which are based on fitting the whole training set - use `summary`:
+
+```{r Summarising `income_lgr` object., eval = FALSE}
+##  summarising the income_knn object
+summary(income_lgr)
+```
+
+You'll note, now, that we seem to have a lot more variables than we started with - `workclassprivate`, `workclasself.emp.inc`, `workclassself.emp.not.inc`, and so on. The reason is that logistic regression - like k-nearest neighbors, actually - requires numeric explanatory variables to work with.
+
+This is solved by creating 'dummy variables' - each 'level' of a categorical variable like `workclass` is turned into its own variable, which is either 0 or 1. These are then handled using a 'treatment contrasts scheme'; one level is designated the "baseline", and coefficients are computed for the rest.
+
+If you look at the summary of `income_lgr`, you'll see that for `marital.status`, for example, `marital.statusdivorced` is lacking a coefficient. That indicates that it is the baseline, and that all other coefficients should be interpreted relative to it.
+
+```{r Zooming into the coefficients for the `marital.status` variable.}
+##  zooming into the coefficients for the `marital.status` variable
+summary(income_lgr)$coefficients[6:11, ]
+```
+
+In this case, that means that, for example, `marital.statusmarried`, which has a negative coefficient, makes you less likely than a `divorced` person to... what, actually? We know from the plots we've drawn earlier that married people are *more* likely to make over $50.000. What's happening here?
+
+It appears that `over.50k` is the reference level for the response variable, so what we're actually getting is the coefficients associated with predicting that a person makes *less* than $50.000. And it's true that, relative to being divorced, being married makes you *less* likely to make *less* than $50.000.
+
+...but that's quite a mouthful, isn't it? It would be much easier to interpret our coeffients if they were indicating the odds of making *more* than $50.000, and if the reference level for `marital.status` was "never.married" instead of "divorced"; as a default, R just goes with what comes first alphabetically.
+
+Thankfully, we can do that. We'll need to explicitly convert our variables into the `factor` data type, and then we can use the `relevel()` command to define 'reference levels' that makes more intuitive sense. Like so:
+
+```{r Releveling variables., eval = TRUE}
+## use 'relevel' to define the reference levels for various variables
+trn_income_f <- trn_income %>%
+  mutate(income = relevel(factor(income), ref = "up.to.50k")) %>%
+  mutate(marital.status = relevel(factor(marital.status),
+    ref = "never.married"))
+```
+
+```{r Re-fitting with better levels., eval = FALSE}
+## re-fit the logistic regression model using the better levels
+set.seed(1)
+income_lgr_f = train(income ~ ., method = "glm",
+  family = binomial(link = "logit"), data = trn_income_f,
+  trControl = trainControl(method = 'cv', number = 5))
+
+## viewing our new, better-interpretable coefficients
+summary(income_lgr_f)
+```
+
+#### Exercises
+
+(9) Fit a logistic regression model predicting `native.country` on the basis of all other variables, using `train()` and 5-fold cross validation. Make sure `"united.states"` is the reference level; i.e., the coefficients should reflect the odds related to *not* being US-born.
+
+```{r Exercise 9. Relevel & fit a logistic regression model., eval = FALSE}
+## predict native.country using a logistic regression model
+set.seed(1)
+
+## re-level 'native.country' so that 'united.states' is the reference level
+trn_income_f <- trn_income_f %>%
+  mutate(native.country = relevel(factor(native.country),
+    ref = "united.states"))
+
+## fit the logistic regression model using `train()`
+country_lgr = train(native.country ~ ., method = "glm",
+  family = binomial(link = "logit"), data = trn_income_f,
+  trControl = trainControl(method = 'cv', number = 5))
+
+## check the summary object
+summary(country_lgr)
+
+## answer check: the coefficient for raceasian.pac.island should be 3.698
+```
+
+### The Formula Interface
+
+So far, we've always fit models using all the other variables in the data set as predictors. But what if we want to specify a subset? We can do this easily by changing our syntax. Instead of `income ~ .`, adapt the right-hand side of the 'formula' so that it includes all desired predictors separated by `+`.
+
+For instance, let's predict `income` on the basis of just `age` and `sex`:
+
+```{r The formula interface.}
+## using R's formula interface to specify a subset of predictors
+set.seed(1)
+
+income_knn_as = train(income ~ age + sex, method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5))
+```
+
+(10) Compare the accuracy of this `income_knn_as` model with that of our original `income_knn` version. Do the other predictors add predictive power?
+
+```{r Exercise 10. Compare the accuracy of two models.}
+## compare the accuracy of `income_knn` with `income_knn_as`
+
+## comparing accuracy for the best 'k' found for both models
+max(income_knn$results$Accuracy)
+max(income_knn_as$results$Accuracy)
+
+## answer: yes, there's a reasonably dramatic loss of predictive power!
+```
+
+The 'formula interface' offers a pretty rich language for specifying models:
+
+symbol | meaning
+-------| -----------------------------------------------------
++      | add variable
+-      | remove variable
+:      | add the interaction between variables
+*      | add variables and their interactions
+^      | add variables up to a specified degree
+.      | add all variables in data frame except response
+
+So, for example `income ~ . -sex` means 'predict `income` on the basis of all other variables except `sex` while `income ~ (sex + age + marital.status)^2` means 'predict `income` on the basis of `sex`, `age`, `marital.status` and their two-way interactions' (i.e., `sex:age` but not `sex:age:marital.status`).
+
+The concept of "interactions" makes no sense for a `"knn"` model, but for logistic regression, an interaction effect occurs when the relationship between an explanatory variable and the response is affected by the values of other variables. But for this course, let's just focus on implementing it:
+
+```{r Formula for all two-way interactions., eval = FALSE}
+## using R's 'formula interface' to include all two-way interactions
+set.seed(1)
+income_lgr_asm = train(income ~ (sex + age + marital.status)^2,
+  method = "glm", data = trn_income_f, family = binomial(link = "logit"),
+  trControl = trainControl(method = 'cv', number = 5))
+
+## printing the summary of this new logistic regression analysis
+summary(income_lgr_asm)
+```
+
+#### Exercises
+
+(11) Fit a k-nearest neighbor model using `train()` and 5-fold cross-validation, predicting `income` on the basis of all other variables except for the two `capital` columns.
+
+```{r Exercise 11. Exclude two variables.}
+## predict income without using `capital.gain` & `loss` information
+set.seed(1)
+income_knn_nc = train(income ~ . -capital.gain -capital.loss, method = "knn",
+  data = trn_income, trControl = trainControl(method = 'cv', number = 5))
+```
+
+(12) Fit a logistic regression model model using `train()` and 5-fold cross-validation, predicting `sex` on the basis of `education.num`, `hours.per.week`, `income`, and all their possible interactions.
+
+```{r Exercise 12. Three terms and their interactions.}
+## predict sex from `education.num`, `hours.per.week` and `income`
+set.seed(1)
+sex_lgr_ehc = train(sex ~ education.num * hours.per.week * income,
+  method = "glm", family = binomial(link = "logit"), data = trn_income_f,
+  trControl = trainControl(method = 'cv', number = 5))
+```
+
+### Customizing train()
+
+The `train()` function allows for a lot of customization, which may or may not make sense depending on the model you're trying to fit. One important option is that of specifying the different parameters you want to try - i.e., in the case of a `"knn"` model, the different values of *k*. One way to do this is to specify a 'tuneGrid' argument: Supply a data frame with a column for each parameter, and the set of values to try. Like so:
+
+```{r Using the tuneGrid argument in train().}
+## use 'tuneGrid' to try other values of 'k'; 3 and 12, in this case
+set.seed(1)
+income_knn_tG = train(income ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5),
+  tuneGrid = data.frame(k = c(3, 12)))
+
+##  looking at the `income_knn_tG` object
+income_knn_tG
+```
+
+Another useful `train()` feature is the ability to automatically pre-process the data. Some models, like `"knn"`, are actually quite sensitive to the *scale* of the explanatory variables. When calculating 'nearest neighbors', it can matter a lot if one variable is measured in the thousands and another in the single digits - the total "distance" is going to be dominated by the variable that happens to be measured in the largest units.
+
+To fix this, we can center & scale all explanatory variables - that is, divide them by their means and standard deviations. In `train()`, this requires the argument `preProcess`, which we can specify as follows:
+
+```{r Using the preProcess argument in train().}
+## use 'preProcess' to center and scale the variables before fitting
+set.seed(1)
+income_knn_pP = train(income ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5),
+  preProcess = c("center", "scale"))
+```
+
+(13) Compare the accuracy of this `income_knn_pP` model with that of our original `income_knn` version. Does center & scaling the predictors help?
+
+```{r Exercise 13. Compare the accuracy of two models.}
+## compare the accuracy of `income_knn` with `income_knn_pP`
+
+## comparing accuracy for the best 'k' found for both models
+max(income_knn$results$Accuracy)
+max(income_knn_pP$results$Accuracy)
+
+## answer: no, in this case centering & scaling doesn't help!
+```
+
+Finally, be aware that you don't *have* to train a `caret` model by 'accuracy'. Accuracy is the overall proportion of cases classified correctly. Sometimes, this isn't really the measure of interest; i.e., for the `income` problem, just assigning everyone to the majority class will already give you 75% accuracy.
+
+Instead, you might be more interested in identifying as many people as possible who are likely to make over $50.000 - in essence, you care about maximizing your 'true positives' while not being terribly concerned about 'false positives'. In machine learning terms, that's called optimising *recall*.
+
+We can get `train()` to do this for us too! Instead of selecting the *k* that optimises accuracy, let's select the *k* that optimises recall. We have to add a new argument, `metric`, and set it equal to `"Recall"`. In addition, we have to tell `trainControl` to keep slightly more & different information about each fold; we set `classProbs` to `TRUE` and `summaryFunction` to `prSummary` - short for, 'precision and recall summary'. Like so:
+
+```{r Using the metric argument in train().}
+## use 'metric' to train on recall instead of accuracy
+set.seed(1)
+income_knn_mR = train(income ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5, classProbs = TRUE,
+    summaryFunction = prSummary), metric = "Recall")
+```
+
+#### Exercises
+
+(14) Instead of 'tuneGrid', `train()` also offers the argument `tuneLength`. Fit a `"knn"` model predicting `occupation` on the basis of all other variables using 5-fold cross validation and `tuneLength = 5`. What does `tuneLength` do?
+
+```{r Exercise 14. Try out tuneLength.}
+## predict 'occupation' while trying out the effect of tuneLength = 5
+set.seed(1)
+occupation_knn_tL = train(occupation ~ ., method = "knn",
+  data = trn_income_f, trControl = trainControl(method = 'cv', number = 5),
+  tuneLength = 5)
+
+## answer: tuneLength generates a number of parameter values to try equal
+## to the 'length' argument that you specify
+```
+
+(15) Fit a `"knn"` model predicting `sex` on the basis of all other variables using 5-fold cross validation; optimise `"Precision"` instead of accuracy.
+
+```{r Exercise 15. Optimise precision instead of accuracy.}
+## predict sex, optimise precision instead of accuracy
+set.seed(1)
+sex_knn_mP = train(sex ~ ., method = "knn", data = trn_income,
+  trControl = trainControl(method = 'cv', number = 5, classProbs = TRUE,
+    summaryFunction = prSummary), metric = "Precision")
+```
+
+### Evaluating Performance on the Test Set
+
+After we've finished fitting our models - trying all the different algorithms, parameters, preprocessing steps and optimisation procedures that we're interested in - and reached a conclusion about which seems to be best, it's time to test its performance on an unseen test set. This is the fairest measure of how well we should expect the  model to perform on new data.
+
+To do that, we need the function `predict()`. Many R model fitting procedures come with a `predict()` function; it's job is always to generate a model's predictions for a set of specified observations. To see what it does, let's call it on our original `income_knn` model and the `tst_income` data set:
+
+```{r Demonstrating predict().}
+## demonstrating `predict()` on the test set
+set.seed(1)
+predicted_outcomes <- predict(income_knn, tst_income)
+predicted_outcomes[1:10]
+```
+
+Now, to calculate our model's accuracy on the test set, we'd need to count the number of `predicted_outcomes` that match the true outcomes, and then divide by the total number of observations. Like this:
+
+```{r Hand-calculating accuracy.}
+## hand-calculating accuracy on the test
+accuracy <- sum(predicted_outcomes == tst_income$income) /
+  length(tst_income$income)
+accuracy
+```
+
+About 84%! That's not bad - certainly no worse than we did on the training set. Our model has generalised well to new, unseen data!
+
+We can also determine this using `caret`'s `confusionMatrix` function. It takes two vectors  - a vector of predicted outcomes, and one of true outcomes - and then automatically spits out a range of evaluation measures, including accuracy as well as 'recall', which the `confusionMatrix` function calls 'sensitivity'.
+
+To run `confusionMatrix()`, we need our vectors of predicted outcomes and of true outcomes to be the same type; `predict()` has automatically converted `predicted_outcomes` to `factor()`, so let's do that for `tst_income$income` also, and then create our `confusionMatrix()`, like so:
+
+```{r Creating a confusionMatrix().}
+## converting `tst_income$income` to factor()
+tst_income$income <- factor(tst_income$income)
+
+## creating a confusionMatrix()
+knn_confM <- confusionMatrix(predicted_outcomes, tst_income$income)
+```
+
+\newpage
+```{r Printing a confusionMatrix().}
+## demonstrating `caret`'s confusionMatrix() on the test set
+knn_confM
+```
+
+The actual 'confusion matrix' of the function name is at the top: It shows us that, of the 1808 people in the test set, 229 + 196 actually made over $50.000, and of those 425 people, 229 were correctly identified as such. Conversely, 93 + 1290 made less than $50.000, and of those, 1290 were correctly identified.
+
+Now, one thing we might like to know is whether our model trained on 'recall', i.e., `income_knn_mR`, actually obtains a higher 'recall' score than our standard `income_knn` model. Given that 'recall' and 'sensitivity' are identical, we can check this in the `confusionMatrix()` output:
+
+```{r Checking the effect of training on recall.}
+## first use 'predict' to generate the predicted outcomes on the test set
+set.seed(1)
+predicted_outcomes_mR <- predict(income_knn_mR, tst_income)
+
+## create the confusionMatrix() object for the recall-trained model
+knn_mR_confM <- confusionMatrix(predicted_outcomes_mR, tst_income$income)
+knn_mR_confM
+```
+
+It appears that our effort to train on 'recall' has had an effect! Looking at the `confusionMatrix()` output, we can see that the original accuracy-trained `"knn"` had a recall of 0.5388, while the recall-trained `"knn"` had a recall of 0.5906 - more of the high-earners have been correctly classified as such.
+
+As a final question one might ask: Can we get these evaluation measures out of `confusionMatrix` automatically, without copying them off the output printed to the screen? The answer is that of course we can; `confusionMatrix()` returns a list, and if we hunt around in its contents enough, we'll find this:
+
+```{r Automatically extracting sensitivity from confusionMatrix(). }
+## automatically extracting sensitivity from confusionMatrix()
+knn_confM$byClass["Sensitivity"]
+```
+
+#### Exercises
+
+(16) Create a `confusionMatrix` for the original `income_knn` model and the `trn_income` data set. This lets us check how well the model performs on the same data is was actually trained on. You'll notice that the reported 'accuracy' is considerably higher than that which appears if you print `income_knn` to the screen. Can you explain why?
+
+```{r Exercise 16. Create a confusionMatrix for trn_income., eval = FALSE}
+## create a confusionMatrix for the trn_income data set.
+set.seed(1)
+pred_income_trn <- predict(income_knn, trn_income)
+trn_confM <- confusionMatrix(pred_income_trn, factor(trn_income$income))
+trn_confM
+
+## answer: `income_knn` contains the cross validated accuracy, which uses
+## mini-test sets to evaluate accuracy on semi-unseen data; this is really
+## just the model predicting data which was also used to train it
+```
+
+(17) Create a `confusionMatrix` for the logistic regression model `income_lgr`; evaluate its performance on the test set. Extract the 'Accuracy' from this object, and compare it to that of the `"knn"` model. Which works better?
+
+```{r Exercise 17. Create a confusionMatrix & extract accuracy., eval = FALSE }
+## create a confusionMatrix for `income_lgr` & extract accuracy
+set.seed(1)
+pred_income_lgr <- predict(income_lgr, tst_income)
+lgr_confM <- confusionMatrix(pred_income_lgr, factor(tst_income$income))
+lgr_confM
+
+## extracting the overall accuracy 
+lgr_confM$overall["Accuracy"]
+
+## answer: this accuracy is slightly lower than that of the `"knn"` model
+knn_confM$overall["Accuracy"]
+```
+
+### Putting It All Together
+
+(18) Fit a `"knn"` model predicting `income` on the basis of all other variables except for `native.country`, using 3-fold cross validation. Maximise `"Precision"` instead of accuracy, and try 3, 5, 7, 9, 11, 13 and 15 as values for *k*. Then, create a boxplot showing the distribution of `"Precision"` values across folds, for the different values of *k*.
+
+(Hints: You'll need to explicitly tell `train()` to save the results per fold; and remember that `k` looks like a continuous variable, which won't do as the variable on the x-axis of a boxplot; convert to factor first.)
+
+```{r Exercise 18. Putting it all together.}
+## create the model & plot described above
+set.seed(1)
+
+## fitting the 'knn' model
+income_fit = train(income ~ . -native.country, method = "knn",
+  data = trn_income, trControl = trainControl(method = 'cv', number = 3,
+    classProbs = TRUE, summaryFunction = prSummary, returnResamp = "all"),
+  metric = "Precision", tuneGrid = data.frame(k = seq(3, 15, by = 2)))
+
+## drawing the requested plot
+ggplot(income_fit$resample, aes(x = factor(k), y = Precision)) +
+  geom_boxplot() +
+  scale_x_discrete("value of k") +
+  scale_y_continuous("precision")
+```
+
+### Skills & Further Resources
+
+This worksheet has introduced the `caret` package for model fitting in R.
+
+After working through it, you should be able to:
+
+1. Partition data into training -and test sets.
+2. Fit a k-nearest neighbors model using `train()`.
+3. Fit a logistic regression model using `train()`.
+4. Explain the concept of cross-validation.
+5. Use `train()` to do cross-validation.
+6. Use R's formula interface to describe complex models.
+7. Use `relevel()` to change the "baseline level" of `factor()` variables
+8. Pull interesting elements out of model objects.
+9. Customize `train()` to return more extensive results per fold.
+10. Customize `train()` to try different parameter values.
+11. Customize `train()` to do pre-processing.
+12. Customize `train()` to train on different measures.
+13. Use `predict()` to predict responses to new data.
+14. Use `confusionMatrix()` to evaluate model fit.
+
+If you want a bit more information on some of these topics, I recommend:
+
+* skills 1 - 3, 5 - 14:
+    + §5.1 and $5.3 in 'The `caret` Package'
+    + http://topepo.github.io/caret/index.html
+    + by Max Kuhn
+
+### Overview of New R Functions & Operators
+
+R code                 | does what
+---------------------- | ------------------------------------------------------
+`~`                    | create an R formula
+confusionMatrix()      | calculate model metrics given true & predicted values
+createDataPartition()  | generate indexes to split into a train -and test set
+predict()              | predict responses to new inputs
+relevel()              | change the 'baseline level' of a factor
+sample_frac()          | sample random rows from a data frame, by proportion
+sample_n()             | sample random rows from a data frame, by number
+set.seed()             | fix the origin of R's random number generator
+summary()              | print the default summary of an object
+train()                | fit a model automatically
+trControl()            | specify the details of train()'s model-fitting
