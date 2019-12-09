@@ -127,7 +127,9 @@ results = {
     "Word": []
 }
 
-for i in range(0,test_feature_label_frame["features"].size):
+Size = test_feature_label_frame["features"].size
+
+for i in range(0,Size):
     if(test_feature_label_frame["features"][i].shape[0] > 99):
         features = np.resize(test_feature_label_frame["features"][i], (99, 13))
     else:
@@ -140,12 +142,14 @@ for i in range(0,test_feature_label_frame["features"].size):
     # Using the model to predict
     prob=model.predict(features.reshape(-1, 99, 13))
     index=np.argmax(prob[0])
-    print("Prediction: {}".format(classes[index]))
+    # print("Prediction: {}".format(classes[index]))
     results["Path"].append(test_feature_label_frame["path"][i])
     results["Word"].append(classes[index])
+    p = (i / Size) * 100
+    print ("Creating Predict File: {}%".format(round(p,2)), end="\r")
 
 # Saving the results to a csv file
 Results = pd.DataFrame(results)
-
-Results.to_csv('results.csv')
+print("Saving Predict File")
+Results.to_csv('results.csv', index=False)
 

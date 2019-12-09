@@ -1,4 +1,5 @@
 import pandas as pd
+import time
 import numpy as np
 import matplotlib.pyplot as plt
 import simpleaudio as sa
@@ -32,7 +33,7 @@ test_feature_label_frame = testData.merge(feat_path_frame, how ='inner', on = ["
 conv_model=load_model('best_model.hdf5')
 conv_lstm_model=load_model('best_model_conv-lstm.hdf5')
 conv_lstm_70_30_model=load_model('best_model_conv-lstm(70_30).hdf5')
-conv_lstm_bat32_model=load_model('best_model_conv-lstm(b32).hdf5')
+conv_lstm_bat32_model=load_model('best_model_conv-lstm(b32)(old).hdf5')
 start = 0
 stop = test_feature_label_frame["features"].size
 results = {
@@ -51,26 +52,28 @@ for i in range(start,stop):
         ] = test_feature_label_frame["features"][i]
 
     # Conv 1D Predict word
-    prob=conv_model.predict(features.reshape(-1, 99, 13))
-    index=np.argmax(prob[0])
-    print("Conv 1D: {}".format(classes[index]))
+    # prob=conv_model.predict(features.reshape(-1, 99, 13))
+    # index=np.argmax(prob[0])
+    # print("Conv 1D: {}".format(classes[index]))
 
-    # Conv 1D & LSTM Predict word
-    prob=conv_lstm_model.predict(features.reshape(-1, 99, 13))
-    index=np.argmax(prob[0])
-    print("Conv 1D - LSTM: {}".format(classes[index]))
+    # # Conv 1D & LSTM Predict word
+    # prob=conv_lstm_model.predict(features.reshape(-1, 99, 13))
+    # index=np.argmax(prob[0])
+    # print("Conv 1D - LSTM: {}".format(classes[index]))
 
     # Conv 1D & LSTM train 70 test 30 Predict word
-    prob=conv_lstm_70_30_model.predict(features.reshape(-1, 99, 13))
-    index=np.argmax(prob[0])
-    print("Conv 1D - LSTM (70:30): {}".format(classes[index]))
+    # prob=conv_lstm_70_30_model.predict(features.reshape(-1, 99, 13))
+    # index=np.argmax(prob[0])
+    # print("Conv 1D - LSTM (70:30): {}".format(classes[index]))
 
     # Conv 1D & LSTM batch size 32 Predict word
     prob=conv_lstm_bat32_model.predict(features.reshape(-1, 99, 13))
     index=np.argmax(prob[0])
-    print("Conv 1D - LSTM (batch 32): {}".format(classes[index]))
+    # print("Conv 1D - LSTM (batch 32): {}".format(classes[index]))
     results["Path"].append(test_feature_label_frame["path"][i])
     results["Word"].append(classes[index])
+    p = ((i + 1) / stop) * 100
+    print ("Creating Predict File: {}%".format(round(p,2)), end="\r")
 
     # # Play Audio
     # wave_obj = sa.WaveObject.from_wave_file(train_audio_path+test_feature_label_frame["path"][i])
@@ -79,6 +82,6 @@ for i in range(start,stop):
 
 Results = pd.DataFrame(results)
 
-Results.to_csv('result_test.csv')
+Results.to_csv('result_test(01).csv', index=False)
 
 
