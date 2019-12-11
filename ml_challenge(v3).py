@@ -93,7 +93,7 @@ model.add(Conv1D(16,1, activation='relu', strides=1, padding='same', input_shape
 model.add(Conv1D(32,3, activation='relu', strides=1, padding='same'))
 model.add(Conv1D(128,3, activation='relu', strides=1, padding='same'))
 model.add(MaxPooling1D(3))
-model.add(LSTM(512, return_sequences=True, input_shape=(shape[1], shape[2])))
+model.add(LSTM(128, return_sequences=True, input_shape=(shape[1], shape[2])))
 model.add(LSTM(65, return_sequences=True))
 model.add(Dropout(0.05))
 model.add(Flatten())
