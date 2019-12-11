@@ -91,9 +91,9 @@ inputs = Input(shape=(shape[1], shape[2]))
 model = Sequential()
 model.add(Conv1D(16,1, activation='relu', strides=1, padding='same', input_shape=(shape[1], shape[2])))
 model.add(Conv1D(32,3, activation='relu', strides=1, padding='same'))
-model.add(Conv1D(64,3, activation='relu', strides=1, padding='same'))
+model.add(Conv1D(128,3, activation='relu', strides=1, padding='same'))
 model.add(MaxPooling1D(3))
-model.add(LSTM(128, return_sequences=True, input_shape=(shape[1], shape[2])))
+model.add(LSTM(512, return_sequences=True, input_shape=(shape[1], shape[2])))
 model.add(LSTM(65, return_sequences=True))
 model.add(Dropout(0.05))
 model.add(Flatten())
@@ -113,14 +113,11 @@ verbose=1, save_best_only=True, mode='max')
 history=model.fit(x_train, y_train ,epochs=100, callbacks=[es,mc], 
 batch_size=32, validation_data=(x_val,y_val), verbose=1)
 
-# Calculation and outputing accuracy
-y_pred = model.predict_classes(x_val, verbose=False)
-print(accuracy_score(y_val, y_pred))
-
-## 1D Conv. 80:20, batch=64  : acc:81.7% (first)
-## 1D Conv LSTM. 80:20, batch=55 : acc:89.997% (first)
-## 1D Conv LSTM. 70:30, batch=32 : acc:89.695% (first)
-## 1D Conv LSTM. 80:20, batch=32 : acc:90.076% (first)
+## 1D Conv(3). 80:20, batch=64  : acc:81.7%
+## 1D Conv(3) LSTM(2). 80:20, batch=55 : acc:89.997%
+## 1D Conv(3) LSTM(2). 70:30, batch=32 : acc:89.695%
+## 1D Conv(3) LSTM(2). 80:20, batch=32 : acc:90.076%
+## 1D Conv(4) LSTM(3). 80:20, batch=64 : acc:90.757%
 
 results = {
     "Path" : [],
